@@ -33,11 +33,11 @@ A minimalist, high-performance TUI text editor written in Go.
    ```
 4. Build:
    ```bash
-   go build ./cmd/larry-text-editor
+   go build ./cmd/larry
    ```
 5. Run:
    ```bash
-   ./larry-text-editor [filename]
+   ./larry [filename]
    ```
 
 ## Key Bindings

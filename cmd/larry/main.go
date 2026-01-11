@@ -1,4 +1,4 @@
-// cmd/larry-text-editor/main.go
+// cmd/larry/main.go
 // Main entry point for the Larry Text Editor.
 // This program starts a Bubble Tea TUI application for a minimalist text editor.
 package main
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"larry-text-editor/internal/ui"
+	"larry/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.design/x/clipboard"
