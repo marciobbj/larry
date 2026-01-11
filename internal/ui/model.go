@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-
+	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -51,19 +51,20 @@ var DefaultKeyMap = KeyMap{
 
 // Model represents the state of the text editor.
 type Model struct {
-	TextArea  textarea.Model // Text area for editing with cursor support
-	Width     int            // Terminal width
-	Height    int            // Terminal height
-	FileName  string         // Current file name (for save/load)
-	KeyMap    KeyMap         // Key bindings for shortcuts
-	Quitting  bool           // Flag to indicate if the app is quitting
-	startRow  int            // selecting starting row
-	startCol  int            // selecting starting col
-	selecting bool
-	saving    bool            // Is the user currently saving?
-	loading   bool            // Is the user currently loading?
-	textInput textinput.Model // Input for filename
-	statusMsg string          // Status message to display
+	TextArea   textarea.Model // Text area for editing with cursor support
+	Width      int            // Terminal width
+	Height     int            // Terminal height
+	FileName   string         // Current file name (for save/load)
+	KeyMap     KeyMap         // Key bindings for shortcuts
+	Quitting   bool           // Flag to indicate if the app is quitting
+	startRow   int            // selecting starting row
+	startCol   int            // selecting starting col
+	selecting  bool
+	saving     bool             // Is the user currently saving?
+	loading    bool             // Is the user currently loading?
+	textInput  textinput.Model  // Input for filename
+	filePicker filepicker.Model // File picker for opening files
+	statusMsg  string           // Status message to display
 }
 
 // InitialModel creates and returns a new initial model.
@@ -82,23 +83,41 @@ func InitialModel(filename string, content string) Model {
 	ti.CharLimit = 156
 	ti.Width = 20
 
-	if filename == "" {
-		filename = "untitled.txt"
-	}
+	fp := filepicker.New()
+	fp.AllowedTypes = nil // All files
+	fp.CurrentDirectory, _ = os.Getwd()
+	fp.Height = 10
+	fp.ShowHidden = true
+
+	// Define styles using lipgloss
+	styleCursor := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	styleSelected := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	styleFile := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	styleDir := lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
+
+	// Apply styles (manually or via a dedicated styles struct if available in your version)
+	// For basic version, we rely on default styles or set specific callbacks if needed.
+	// Bubbles filepicker has specific fields for Styles. Let's set them if strictly required or rely on defaults.
+	// Using basic setups for now.
+	fp.Styles.Cursor = styleCursor
+	fp.Styles.Selected = styleSelected
+	fp.Styles.File = styleFile
+	fp.Styles.Directory = styleDir
 
 	return Model{
-		TextArea:  ta,
-		Width:     80,
-		Height:    20,
-		FileName:  filename,
-		KeyMap:    DefaultKeyMap,
-		Quitting:  false,
-		startRow:  0,
-		startCol:  0,
-		selecting: false,
-		textInput: ti,
-		saving:    false,
-		loading:   false,
+		TextArea:   ta,
+		Width:      80,
+		Height:     20,
+		FileName:   filename,
+		KeyMap:     DefaultKeyMap,
+		Quitting:   false,
+		startRow:   0,
+		startCol:   0,
+		selecting:  false,
+		textInput:  ti,
+		saving:     false,
+		loading:    false,
+		filePicker: fp,
 	}
 }
 
@@ -303,16 +322,40 @@ func (m Model) Init() tea.Cmd {
 // It intercepts quit commands and delegates other input to the textarea.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	handled := false
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// Intercept quit before passing to textarea
-		if key.Matches(msg, m.KeyMap.Quit) {
-			m.Quitting = true
-			return m, tea.Quit
-		}
 
-		// Handle Save Mode
-		if m.saving {
+	// Handle Loading Mode (Open)
+	if m.loading {
+		var cmd tea.Cmd
+		m.filePicker, cmd = m.filePicker.Update(msg)
+		if didSelect, path := m.filePicker.DidSelectFile(msg); didSelect {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				m.statusMsg = "Error opening: " + err.Error()
+			} else {
+				m.TextArea.SetValue(string(content))
+				m.statusMsg = "Opened: " + path
+				m.FileName = path
+				m.TextArea.CursorStart()
+				for getRow(m.TextArea) > 0 {
+					m.TextArea.CursorUp()
+				}
+			}
+			m.loading = false
+			m.TextArea.Focus()
+			return m, cmd
+		}
+		// Handle user manual quit via Esc
+		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
+			m.loading = false
+			m.TextArea.Focus()
+		}
+		return m, cmd
+	}
+
+	// Handle Save Mode
+	if m.saving {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
 			switch msg.Type {
 			case tea.KeyEsc:
 				m.saving = false
@@ -323,7 +366,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if filename == "" {
 					filename = "untitled.txt"
 				}
-				// Save file
 				err := os.WriteFile(filename, []byte(m.TextArea.Value()), 0644)
 				if err != nil {
 					m.statusMsg = "Error saving: " + err.Error()
@@ -335,41 +377,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.TextArea.Focus()
 				return m, nil
 			}
-			var cmd tea.Cmd
-			m.textInput, cmd = m.textInput.Update(msg)
-			return m, cmd
 		}
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
 
-		// Handle Loading Mode (Open)
-		if m.loading {
-			switch msg.Type {
-			case tea.KeyEsc:
-				m.loading = false
-				m.TextArea.Focus()
-				return m, nil
-			case tea.KeyEnter:
-				filename := m.textInput.Value()
-				// Read file
-				content, err := os.ReadFile(filename)
-				if err != nil {
-					m.statusMsg = "Error opening: " + err.Error()
-				} else {
-					m.TextArea.SetValue(string(content))
-					m.statusMsg = "Opened: " + filename
-					m.FileName = filename
-					// Move cursor to start of document (0,0)
-					m.TextArea.CursorStart()
-					for getRow(m.TextArea) > 0 {
-						m.TextArea.CursorUp()
-					}
-				}
-				m.loading = false
-				m.TextArea.Focus()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.textInput, cmd = m.textInput.Update(msg)
-			return m, cmd
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		// Intercept quit before passing to textarea
+		if key.Matches(msg, m.KeyMap.Quit) {
+			m.Quitting = true
+			return m, tea.Quit
 		}
 
 		if key.Matches(msg, m.KeyMap.Save) {
@@ -382,10 +401,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if key.Matches(msg, m.KeyMap.Open) {
 			m.loading = true
-			m.textInput.Prompt = "Open: "
-			m.textInput.SetValue("")
-			m.textInput.Focus()
-			return m, nil
+			wd, err := os.Getwd()
+			if err != nil {
+				m.statusMsg = "Error getting wd: " + err.Error()
+			} else {
+				m.filePicker.CurrentDirectory = wd
+			}
+
+			// DEBUG: Check permissions manually
+			files, err := os.ReadDir(wd)
+			if err != nil {
+				m.statusMsg = "ReadDir Error: " + err.Error()
+			} else {
+				m.statusMsg = fmt.Sprintf("Dir has %d files. Loading...", len(files))
+			}
+
+			// Initialize/update file list
+			cmd := m.filePicker.Init()
+			return m, cmd
 		}
 
 		// Select all text
@@ -656,6 +689,10 @@ func (m Model) View() string {
 
 	if m.saving {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
+	}
+
+	if m.loading {
+		return fmt.Sprintf("%s\n\n%s", baseView, m.filePicker.View())
 	}
 
 	if m.statusMsg != "" {
