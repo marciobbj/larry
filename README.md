@@ -42,9 +42,11 @@ To modify shortcuts, edit the `DefaultKeyMap` struct and update the keys as need
 ## Future Enhancements
 
 - [x] Line numbers
+- [] Closing and Opening existing files
 - [] Layout and UI improvements
 - [] File loading and saving
 - [] Horizontal scrolling
 - [] Word wrapping
 - [] Syntax highlighting
 - [] Undo/redo functionality
+- [] Markdown instant visualization
