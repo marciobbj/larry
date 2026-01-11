@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 
+	"larry/internal/config"
+
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -36,6 +38,7 @@ type KeyMap struct {
 	Undo               key.Binding
 	Redo               key.Binding
 	GoToLine           key.Binding
+	ToggleHelp         key.Binding
 }
 
 var DefaultKeyMap = KeyMap{
@@ -58,6 +61,7 @@ var DefaultKeyMap = KeyMap{
 	Undo:               key.NewBinding(key.WithKeys("ctrl+z")),
 	Redo:               key.NewBinding(key.WithKeys("ctrl+shift+z")),
 	GoToLine:           key.NewBinding(key.WithKeys("ctrl+g")),
+	ToggleHelp:         key.NewBinding(key.WithKeys("ctrl+h")),
 }
 
 var (
@@ -106,9 +110,11 @@ type Model struct {
 	CursorCol  int
 	UndoStack  []EditOp
 	RedoStack  []EditOp
+	Config     config.Config
+	showHelp   bool
 }
 
-func InitialModel(filename string, content string) Model {
+func InitialModel(filename string, content string, cfg config.Config) Model {
 	ta := textarea.New()
 	ta.SetWidth(80)
 	ta.SetHeight(20)
@@ -133,6 +139,8 @@ func InitialModel(filename string, content string) Model {
 	fp.Styles.File = styleFile
 	fp.Styles.Directory = styleDir
 
+	SetTheme(cfg.Theme)
+
 	return Model{
 		TextArea:   ta,
 		Width:      80,
@@ -150,6 +158,8 @@ func InitialModel(filename string, content string) Model {
 		Lines:      strings.Split(content, "\n"),
 		CursorRow:  0,
 		CursorCol:  0,
+		Config:     cfg,
+		showHelp:   false,
 	}
 }
 
@@ -348,6 +358,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.showHelp {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.Type == tea.KeyEsc || key.Matches(keyMsg, m.KeyMap.ToggleHelp) {
+				m.showHelp = false
+			}
+		}
+		return m, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		var cmd tea.Cmd
@@ -414,7 +433,7 @@ func (m Model) View() string {
 		// Just render one empty line with cursor
 		s := strings.Builder{}
 		s.WriteString(borderStyle.Render("│"))
-		if m.TextArea.ShowLineNumbers {
+		if m.Config.LineNumbers {
 			s.WriteString(lineNumStyle.Render("   1 "))
 		}
 		s.WriteString(styleCursor.Render(" ")) // Cursor
@@ -443,7 +462,7 @@ func (m Model) View() string {
 
 		// Calculate available width
 		textWidth := m.TextArea.Width()
-		if m.TextArea.ShowLineNumbers {
+		if m.Config.LineNumbers {
 			textWidth -= 6
 		}
 		textWidth -= 1 // Border
@@ -473,7 +492,7 @@ func (m Model) View() string {
 				}
 
 				s.WriteString(borderStyle.Render("│"))
-				if m.TextArea.ShowLineNumbers {
+				if m.Config.LineNumbers {
 					if isFirst {
 						ln := fmt.Sprintf(" %3d ", lineNum+1)
 						s.WriteString(lineNumStyle.Render(ln))
@@ -524,7 +543,7 @@ func (m Model) View() string {
 
 					visualChar := string(ch)
 					if ch == '\t' {
-						visualChar = "    "
+						visualChar = strings.Repeat(" ", m.Config.TabWidth)
 					}
 
 					if applyStyle {
@@ -565,7 +584,7 @@ func (m Model) View() string {
 			for i := 0; i < len(lineRunes); i++ {
 				charWidth := 1
 				if lineRunes[i] == '\t' {
-					charWidth = 4
+					charWidth = m.Config.TabWidth
 				}
 
 				if currentVisualWidth+charWidth > textWidth {
@@ -609,13 +628,78 @@ func (m Model) View() string {
 		}
 	*/
 
+	if m.showHelp {
+		return m.viewHelpMenu(baseView)
+	}
+
 	return baseView
+}
+
+func (m Model) viewHelpMenu(base string) string {
+	width := m.Width
+	height := m.Height
+
+	// Define visual style for the help menu
+	helpStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62")).
+		Padding(1, 2).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("252"))
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("205")).
+		Bold(true).
+		MarginBottom(1)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("154")).
+		Bold(true)
+
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("248"))
+
+	shortcuts := []struct {
+		Key  string
+		Desc string
+	}{
+		{"Ctrl+q", "Quit"},
+		{"Ctrl+s", "Save"},
+		{"Ctrl+o", "Open File"},
+		{"Ctrl+g", "Go to Line"},
+		{"Ctrl+h", "Toggle Help"},
+		{"Ctrl+z", "Undo"},
+		{"Ctrl+Shift+z", "Redo"},
+		{"Ctrl+c", "Copy"},
+		{"Ctrl+v", "Paste"},
+		{"Ctrl+x", "Cut"},
+		{"Ctrl+a", "Select All"},
+		{"Shift+Arrow", "Select Text"},
+	}
+
+	var sb strings.Builder
+	sb.WriteString(titleStyle.Render("Larry - Help Menu"))
+	sb.WriteString("\n")
+
+	for _, s := range shortcuts {
+		sb.WriteString(fmt.Sprintf("%-20s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
+	}
+	sb.WriteString("\nPress Esc or Ctrl+h to close")
+
+	helpMenu := helpStyle.Render(sb.String())
+
+	// Center the help menu
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, helpMenu)
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch {
+	case key.Matches(msg, m.KeyMap.ToggleHelp):
+		m.showHelp = !m.showHelp
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.Quit):
 		m.Quitting = true
 		return m, tea.Quit

@@ -17,10 +17,20 @@ var (
 
 func init() {
 	// Load a default theme (e.g., Dracula or Monokai)
-	theme = styles.Get("dracula")
-	if theme == nil {
-		theme = styles.Fallback
+	SetTheme("dracula")
+}
+
+func SetTheme(themeName string) {
+	t := styles.Get(themeName)
+	if t == nil {
+		t = styles.Fallback
 	}
+	theme = t
+	// Clear the cache as the theme has changed
+	lipglossCache.Range(func(key, value interface{}) bool {
+		lipglossCache.Delete(key)
+		return true
+	})
 }
 
 func GetLineStyles(line string, filename string) []lipgloss.Style {
