@@ -125,12 +125,6 @@ func InitialModel(filename string, content string) Model {
 	fp.CurrentDirectory, _ = os.Getwd()
 	fp.Height = 10
 	fp.ShowHidden = true
-
-	styleCursor := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	styleSelected := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
-	styleFile := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	styleDir := lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
-
 	fp.Styles.Cursor = styleCursor
 	fp.Styles.Selected = styleSelected
 	fp.Styles.File = styleFile

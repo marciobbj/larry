@@ -68,6 +68,7 @@ A minimalist, high-performance TUI text editor written in Go.
 - [x] Syntax highlighting
 - [x] Undo/redo functionality
 - [ ] Search / Find & Replace
+- [ ] Go to line
 - [ ] Markdown instant visualization
 - [ ] LSP support
 - [ ] Config file support
