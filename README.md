@@ -105,7 +105,7 @@ Run Larry with the `-config` flag:
 - [ ] LSP support
 - [x] Config file support
 - [ ] Plugin system
-- [] Theme support
+- [x] Theme support
 - [x] Add Help Menu and Docs
 - [ ] Add to a remote package manager
 - [ ] Improve resizing and responsiveness (add scaling etc)
