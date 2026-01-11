@@ -549,7 +549,7 @@ func (m Model) View() string {
 					if applyStyle {
 						if !m.selecting && lineNum == cursorRow && i == cursorCol {
 							if ch == '\t' {
-								s.WriteString("\x1b[47m\x1b[30m \x1b[0m   ")
+								s.WriteString("\x1b[47m\x1b[30m \x1b[0m" + strings.Repeat(" ", m.Config.TabWidth-1))
 							} else {
 								s.WriteString("\x1b[47m\x1b[30m" + visualChar + "\x1b[0m")
 							}
