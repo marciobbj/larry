@@ -70,9 +70,25 @@ func InitialModel() Model {
 	}
 }
 
-// getCol returns the current column (character offset) of the cursor using the public API.
+// getCol returns the current column (character offset) within the logical line.
+// This handles wrapped lines correctly by calculating the position in the unwrapped line.
 func getCol(ta textarea.Model) int {
-	return ta.LineInfo().CharOffset
+	// LineInfo().CharOffset gives the offset within the current wrapped segment
+	// We need to calculate the actual offset in the logical line
+	li := ta.LineInfo()
+
+	// Get the text width to understand wrapping
+	width := ta.Width()
+	if ta.ShowLineNumbers {
+		width -= 6
+	}
+	if width < 1 {
+		width = 1
+	}
+
+	// RowOffset tells us which wrapped row we're on within the current logical line
+	// CharOffset tells us the position within that wrapped row
+	return li.RowOffset*width + li.CharOffset
 }
 
 // getRow returns the current row (line number) of the cursor using the public API.
@@ -225,34 +241,73 @@ func (m Model) View() string {
 			startIdx, endIdx = endIdx, startIdx
 		}
 
+		// Calculate available width for text (accounting for line numbers)
+		textWidth := m.TextArea.Width()
+		if m.TextArea.ShowLineNumbers {
+			textWidth -= 6 // " 123 " = 6 characters for line numbers
+		}
+		if textWidth < 10 {
+			textWidth = 10
+		}
+
 		// Process line by line to properly handle line numbers
 		lines := strings.Split(val, "\n")
 		var s strings.Builder
 		runeIdx := 0
 
 		for lineNum, line := range lines {
-			// Add line number first (before any highlighting)
-			if m.TextArea.ShowLineNumbers {
-				ln := fmt.Sprintf(" %3d ", lineNum+1)
-				s.WriteString(ln)
-			}
-
-			// Process each character in the line
 			lineRunes := []rune(line)
-			for _, ch := range lineRunes {
-				if runeIdx >= startIdx && runeIdx < endIdx {
-					// Use orange background (color 208) and black text (color 0)
-					s.WriteString("\x1b[48;5;208;38;5;0m")
-					s.WriteRune(ch)
-					s.WriteString("\x1b[0m")
-				} else {
-					s.WriteRune(ch)
+
+			// Handle word wrap - break long lines into multiple visual lines
+			if len(lineRunes) == 0 {
+				// Empty line
+				if m.TextArea.ShowLineNumbers {
+					ln := fmt.Sprintf(" %3d ", lineNum+1)
+					s.WriteString(ln)
 				}
-				runeIdx++
+				s.WriteString("\n")
+				runeIdx++ // Count the \n character
+				continue
 			}
 
-			// Add newline and count it in the rune index
-			s.WriteString("\n")
+			// Process the line in chunks of textWidth
+			chunkStart := 0
+			isFirstChunk := true
+			for chunkStart < len(lineRunes) {
+				chunkEnd := chunkStart + textWidth
+				if chunkEnd > len(lineRunes) {
+					chunkEnd = len(lineRunes)
+				}
+
+				// Add line number only for the first chunk of each logical line
+				if m.TextArea.ShowLineNumbers {
+					if isFirstChunk {
+						ln := fmt.Sprintf(" %3d ", lineNum+1)
+						s.WriteString(ln)
+					} else {
+						s.WriteString("      ") // Padding for wrapped lines
+					}
+				}
+				isFirstChunk = false
+
+				// Process each character in the chunk
+				for i := chunkStart; i < chunkEnd; i++ {
+					ch := lineRunes[i]
+					charIdx := runeIdx + i
+					if charIdx >= startIdx && charIdx < endIdx {
+						// Use orange background (color 208) and black text (color 0)
+						s.WriteString("\x1b[48;5;208;38;5;0m")
+						s.WriteRune(ch)
+						s.WriteString("\x1b[0m")
+					} else {
+						s.WriteRune(ch)
+					}
+				}
+				s.WriteString("\n")
+				chunkStart = chunkEnd
+			}
+
+			runeIdx += len(lineRunes)
 			runeIdx++ // Count the \n character
 		}
 
