@@ -10,7 +10,7 @@ A minimalist, high-performance TUI text editor written in Go.
 
 ## Features
 
-- **OptimizedFile Loader**: Custom rendering engine optimizing performance for large files (O(1) input, O(H) rendering).
+- **Optimized File Loader**: Custom rendering engine optimizing performance for large files (O(1) input, O(H) rendering).
 - **Core Functionality**:
     - Undo/Redo (`Ctrl+Z`, `Ctrl+Shift+Z`)
     - Clipboard Support (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`)
