@@ -83,3 +83,4 @@ A minimalist, high-performance TUI text editor written in Go.
 - [ ] Add Help Menu and Docs
 - [ ] Add to a remote package manager
 - [ ] Improve resizing and responsiveness (add scaling etc)
+- [ ] Add some smart larry-movements like ctrl+down and ctrl+up to move cursor faster down and up - ctrl+left and ctrl+right to make the cursor to jump words
