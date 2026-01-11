@@ -331,6 +331,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Height = msg.Height
 		m.TextArea.SetWidth(msg.Width)
 		m.TextArea.SetHeight(msg.Height)
+
+		// Reset yOffset to valid bounds after resize
+		if len(m.Lines) <= m.TextArea.Height() {
+			m.yOffset = 0
+		} else {
+			maxOffset := len(m.Lines) - m.TextArea.Height()
+			if m.yOffset > maxOffset {
+				m.yOffset = maxOffset
+			}
+			if m.yOffset < 0 {
+				m.yOffset = 0
+			}
+		}
+
+		m = m.updateViewport()
+		return m, nil
 	}
 
 	var taCmd tea.Cmd
@@ -406,10 +422,9 @@ func (m Model) View() string {
 		lines := m.Lines
 		var s strings.Builder
 
-		endLine := m.yOffset + m.TextArea.Height()
-		if endLine > len(lines) {
-			endLine = len(lines)
-		}
+		// We need to limit the number of visual lines (chunks) to m.TextArea.Height()
+		maxVisualLines := m.TextArea.Height()
+		visualLinesRendered := 0
 
 		startLine := m.yOffset
 		if startLine < 0 {
@@ -419,7 +434,7 @@ func (m Model) View() string {
 			startLine = len(lines)
 		}
 
-		for lineNum := startLine; lineNum < endLine; lineNum++ {
+		for lineNum := startLine; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 			line := lines[lineNum]
 			lineRunes := []rune(line)
 
@@ -437,11 +452,15 @@ func (m Model) View() string {
 				if lineNum == cursorRow && !m.selecting {
 					s.WriteString(styleCursor.Render(" "))
 				}
-				s.WriteString("\n")
+
+				visualLinesRendered++
+				if visualLinesRendered < maxVisualLines {
+					s.WriteString("\n")
+				}
 				continue
 			}
 
-			for chunkStart < len(lineRunes) {
+			for chunkStart < len(lineRunes) && visualLinesRendered < maxVisualLines {
 				chunkEnd := chunkStart + textWidth
 				if chunkEnd > len(lineRunes) {
 					chunkEnd = len(lineRunes)
@@ -535,7 +554,11 @@ func (m Model) View() string {
 
 				// Clear to end of line to remove artifacts
 				s.WriteString("\x1b[K")
-				s.WriteString("\n")
+
+				visualLinesRendered++
+				if visualLinesRendered < maxVisualLines {
+					s.WriteString("\n")
+				}
 				chunkStart = chunkEnd
 			}
 		}
