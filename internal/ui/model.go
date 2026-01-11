@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.design/x/clipboard"
 )
 
 // KeyMap defines key bindings for editor shortcuts.
@@ -23,16 +24,22 @@ type KeyMap struct {
 	MoveSelectionUp    key.Binding
 	MoveSelectionLeft  key.Binding
 	MoveSelectionRight key.Binding
+	Copy               key.Binding
+	Paste              key.Binding
+	Cut                key.Binding
 }
 
 // DefaultKeyMap provides the default key bindings.
 var DefaultKeyMap = KeyMap{
-	Quit:               key.NewBinding(key.WithKeys("ctrl+c")),
+	Quit:               key.NewBinding(key.WithKeys("ctrl+q")),
 	SelectAll:          key.NewBinding(key.WithKeys("ctrl+a")),
 	MoveSelectionDown:  key.NewBinding(key.WithKeys("shift+down")),
 	MoveSelectionLeft:  key.NewBinding(key.WithKeys("shift+left")),
 	MoveSelectionRight: key.NewBinding(key.WithKeys("shift+right")),
 	MoveSelectionUp:    key.NewBinding(key.WithKeys("shift+up")),
+	Copy:               key.NewBinding(key.WithKeys("ctrl+c")),
+	Paste:              key.NewBinding(key.WithKeys("ctrl+v")),
+	Cut:                key.NewBinding(key.WithKeys("ctrl+x")),
 }
 
 // Model represents the state of the text editor.
@@ -173,6 +180,35 @@ func (m *Model) deleteSelection() bool {
 	return true
 }
 
+// getSelectedText returns the currently selected text.
+func (m *Model) getSelectedText() string {
+	if !m.selecting {
+		return ""
+	}
+
+	val := m.TextArea.Value()
+	if val == "" {
+		return ""
+	}
+
+	startIdx := getAbsoluteIndex(val, m.startRow, m.startCol)
+	endIdx := getAbsoluteIndex(val, getRow(m.TextArea), getCol(m.TextArea))
+
+	if startIdx > endIdx {
+		startIdx, endIdx = endIdx, startIdx
+	}
+
+	runes := []rune(val)
+	if startIdx >= len(runes) {
+		return ""
+	}
+	if endIdx > len(runes) {
+		endIdx = len(runes)
+	}
+
+	return string(runes[startIdx:endIdx])
+}
+
 func Write(errorMessage string) {
 	f, err := os.OpenFile("larry.log", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 
@@ -208,6 +244,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startRow = 0
 			m.startCol = 0
 			m.TextArea.CursorEnd()
+		}
+		// Copy selected text to clipboard
+		if key.Matches(msg, m.KeyMap.Copy) && m.selecting {
+			text := m.getSelectedText()
+			if text != "" {
+				clipboard.Write(clipboard.FmtText, []byte(text))
+			}
+			handled = true
+		}
+		// Cut selected text (copy + delete)
+		if key.Matches(msg, m.KeyMap.Cut) && m.selecting {
+			text := m.getSelectedText()
+			if text != "" {
+				clipboard.Write(clipboard.FmtText, []byte(text))
+			}
+			m.deleteSelection()
+			handled = true
+		}
+		// Paste from clipboard
+		if key.Matches(msg, m.KeyMap.Paste) {
+			// If there's a selection, delete it first
+			if m.selecting {
+				m.deleteSelection()
+			}
+			// Get text from clipboard and insert it
+			data := clipboard.Read(clipboard.FmtText)
+			if len(data) > 0 {
+				m.TextArea.InsertString(string(data))
+			}
+			handled = true
 		}
 		// Handle delete/backspace when text is selected
 		if m.selecting && (msg.Type == tea.KeyDelete || msg.Type == tea.KeyBackspace) {
