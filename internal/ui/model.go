@@ -38,6 +38,8 @@ type KeyMap struct {
 	CursorLeft         key.Binding
 	CursorRight        key.Binding
 	Delete             key.Binding
+	Undo               key.Binding
+	Redo               key.Binding
 }
 
 // DefaultKeyMap provides the default key bindings.
@@ -58,6 +60,8 @@ var DefaultKeyMap = KeyMap{
 	CursorLeft:         key.NewBinding(key.WithKeys("left")),
 	CursorRight:        key.NewBinding(key.WithKeys("right")),
 	Delete:             key.NewBinding(key.WithKeys("backspace", "delete")),
+	Undo:               key.NewBinding(key.WithKeys("ctrl+z")),
+	Redo:               key.NewBinding(key.WithKeys("ctrl+shift+z")),
 }
 
 // Global Styles
@@ -67,8 +71,23 @@ var (
 	styleFile     = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	styleDir      = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
 	lineNumStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	borderStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	borderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
+
+type OpType int
+
+const (
+	OpInsert OpType = iota
+	OpDelete
+)
+
+type EditOp struct {
+	Type OpType
+	Row  int
+	Col  int
+	Text string
+}
 
 // Model represents the state of the text editor.
 type Model struct {
@@ -90,6 +109,8 @@ type Model struct {
 	Lines      []string         // File content as lines
 	CursorRow  int              // Cursor Row
 	CursorCol  int              // Cursor Col
+	UndoStack  []EditOp
+	RedoStack  []EditOp
 }
 
 // InitialModel creates and returns a new initial model.
@@ -560,9 +581,11 @@ func (m Model) View() string {
 			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")), // transparent/black
 		)
 	}
-	if m.statusMsg != "" {
-		return fmt.Sprintf("%s\n\n%s", baseView, m.statusMsg)
-	}
+	/*
+		if m.statusMsg != "" {
+			return fmt.Sprintf("%s\n\n%s", baseView, m.statusMsg)
+		}
+	*/
 
 	return baseView
 }
@@ -586,10 +609,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	// Open
 	// Open
+	// Open
 	case key.Matches(msg, m.KeyMap.Open):
 		m.loading = true
 		m.filePicker.CurrentDirectory, _ = os.Getwd()
 		return m, m.filePicker.Init()
+
+	// Undo
+	case key.Matches(msg, m.KeyMap.Undo):
+		m = m.undo()
+		return m, nil
+
+	// Redo
+	case key.Matches(msg, m.KeyMap.Redo):
+		m = m.redo()
+		return m, nil
 
 	// Select All
 	case key.Matches(msg, m.KeyMap.SelectAll):
@@ -612,6 +646,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if err != nil {
 				m.statusMsg = "Cut Error: " + err.Error()
 			} else {
+				m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
 				m = m.deleteSelectedText()
 				m.statusMsg = "Cut to clipboard"
 			}
@@ -633,11 +668,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	// Paste
+	// Paste
 	case key.Matches(msg, m.KeyMap.Paste):
 		text, err := m.clipboardRead()
 		if err != nil {
 			m.statusMsg = "Paste Error: " + err.Error()
 		} else {
+			m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: text})
 			m = m.insertTextAtCursor(text)
 			m.statusMsg = "Pasted from clipboard"
 		}
@@ -720,10 +757,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	// Typing (Chars) and Space
 	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		// Logic to handle deleting selection before typing
 		if m.selecting {
-			m.selecting = false // TODO: implement delete selection
+			text := m.getSelectedText()
+			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
+			m = m.deleteSelectedText()
+			// We should probably group this with the insert?
+			// For now, it's 2 atomic ops: Delete Selection, then Insert Char.
+			// Ideally they should be 1 transaction.
+			// But sticking to simple 1:1 for now.
 		}
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
+			m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: string(msg.Runes)})
+
 			line := []rune(m.Lines[m.CursorRow])
 			prefix := line[:m.CursorCol]
 			suffix := line[m.CursorCol:]
@@ -743,16 +789,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	// Backspace
 	case msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete || key.Matches(msg, m.KeyMap.Delete):
 		if m.selecting {
-			m.selecting = false
+			text := m.getSelectedText()
+			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
+			m = m.deleteSelectedText()
 		} else {
 			if m.CursorCol > 0 {
 				line := []rune(m.Lines[m.CursorRow])
+				deletedChar := string(line[m.CursorCol-1])
+				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: m.CursorCol - 1, Text: deletedChar})
+
 				newLine := append(line[:m.CursorCol-1], line[m.CursorCol:]...)
 				m.Lines[m.CursorRow] = string(newLine)
 				m.CursorCol--
 			} else if m.CursorRow > 0 {
+				// Deleting newline from previous line
 				prevLine := m.Lines[m.CursorRow-1]
 				currLine := m.Lines[m.CursorRow]
+				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow - 1, Col: len([]rune(prevLine)), Text: "\n"})
+
 				newCol := len([]rune(prevLine))
 				m.Lines[m.CursorRow-1] = prevLine + currLine
 				m.Lines = append(m.Lines[:m.CursorRow], m.Lines[m.CursorRow+1:]...)
@@ -764,8 +818,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	// Enter
 	case msg.Type == tea.KeyEnter:
 		if m.selecting {
-			m.selecting = false
+			text := m.getSelectedText()
+			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
+			m = m.deleteSelectedText()
 		}
+
+		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: "\n"})
+
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
 			line := []rune(m.Lines[m.CursorRow])
 			prefix := line[:m.CursorCol]
@@ -1070,4 +1129,119 @@ func (m Model) clipboardRead() (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+// pushUndo records an operation to the undo stack and clears the redo stack
+func (m *Model) pushUndo(op EditOp) {
+	m.UndoStack = append(m.UndoStack, op)
+	m.RedoStack = nil // Clear redo stack on new operation
+}
+
+// undo reverts the last operation
+func (m Model) undo() Model {
+	if len(m.UndoStack) == 0 {
+		m.statusMsg = "Nothing to undo"
+		return m
+	}
+
+	// Pop
+	op := m.UndoStack[len(m.UndoStack)-1]
+	m.UndoStack = m.UndoStack[:len(m.UndoStack)-1]
+
+	// Inverse Operation
+	var inverseOp EditOp
+	inverseOp.Row = op.Row
+	inverseOp.Col = op.Col
+	inverseOp.Text = op.Text
+
+	switch op.Type {
+	case OpInsert:
+		// To undo insertion, we delete the inserted text
+		// We use `deleteSelection` logic manually or similar.
+		// Since `op.Text` can be multi-line or single line.
+		inverseOp.Type = OpDelete
+
+		// Setup selection to delete
+		m.startRow = op.Row
+		m.startCol = op.Col
+
+		// Calculate end position based on op.Text
+		lines := strings.Split(op.Text, "\n")
+		if len(lines) == 1 {
+			m.CursorRow = op.Row
+			m.CursorCol = op.Col + len([]rune(lines[0]))
+		} else {
+			m.CursorRow = op.Row + len(lines) - 1
+			m.CursorCol = len([]rune(lines[len(lines)-1]))
+		}
+
+		m.selecting = true
+		m = m.deleteSelectedText() // This modifies m.Lines
+		m.selecting = false
+
+	case OpDelete:
+		// To undo deletion, we insert the deleted text
+		inverseOp.Type = OpInsert
+		m.CursorRow = op.Row
+		m.CursorCol = op.Col
+		m = m.insertTextAtCursor(op.Text)
+	}
+
+	// Push to Redo
+	m.RedoStack = append(m.RedoStack, inverseOp)
+	m.statusMsg = "Undid change"
+	return m
+}
+
+// redo re-applies the last undone operation
+func (m Model) redo() Model {
+	if len(m.RedoStack) == 0 {
+		m.statusMsg = "Nothing to redo"
+		return m
+	}
+
+	// Pop
+	op := m.RedoStack[len(m.RedoStack)-1]
+	m.RedoStack = m.RedoStack[:len(m.RedoStack)-1]
+
+	// Apply Operation
+	// We need to push the *inverse of this* back to UndoStack?
+	// The `op` in RedoStack IS the operation to perform (it was the Inverse of the Undo).
+	// So if we perform it, we need to push ITS inverse to UndoStack.
+	// Actually, simpler: The Op in RedoStack is "Insert X" or "Delete X".
+	// We just execute it. And push it back to UndoStack.
+	// BUT `op` contains the info to DO it.
+
+	// Re-construct the Undo Op (which is the same as this Redo Op essentially)
+	undoOp := op
+
+	switch op.Type {
+	case OpInsert: // Redo an Insert (which was an Undo of Delete)
+		m.CursorRow = op.Row
+		m.CursorCol = op.Col
+		m = m.insertTextAtCursor(op.Text)
+		// UndoOp should be Delete
+		undoOp.Type = OpInsert // Wait. If we just Inserted, we want to Record "Inserted" so Undo can "Delete" it.
+		// Yes. `pushUndo` expects what we DID.
+
+	case OpDelete: // Redo a Delete (which was an Undo of Insert)
+		m.startRow = op.Row
+		m.startCol = op.Col
+		lines := strings.Split(op.Text, "\n")
+		if len(lines) == 1 {
+			m.CursorRow = op.Row
+			m.CursorCol = op.Col + len([]rune(lines[0]))
+		} else {
+			m.CursorRow = op.Row + len(lines) - 1
+			m.CursorCol = len([]rune(lines[len(lines)-1]))
+		}
+		m.selecting = true
+		m = m.deleteSelectedText()
+		m.selecting = false
+		undoOp.Type = OpDelete
+	}
+
+	m.UndoStack = append(m.UndoStack, undoOp)
+	m.statusMsg = "Redid change"
+	return m
 }
