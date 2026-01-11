@@ -12,7 +12,7 @@ A minimalist, high-performance TUI text editor written in Go.
 
 - **Optimized File Loader**: Custom rendering engine optimizing performance for large files (O(1) input, O(H) rendering).
 - **Core Functionality**:
-    - Undo/Redo (`Ctrl+Z`, `Ctrl+Shift+Z`)
+    - Undo/Redo (`Ctrl+Z`)
     - Clipboard Support (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`)
     - Selection with Shift+Arrows
     - File Loading/Saving using modern file picker
@@ -22,6 +22,7 @@ A minimalist, high-performance TUI text editor written in Go.
     - Absolute line numbers
     - Visual cursor and selection highlighting
     - Status reporting (without clutter)
+    - Its lying between VIM and Nano 
 
 ## Installation
 
@@ -52,6 +53,7 @@ A minimalist, high-performance TUI text editor written in Go.
 | **Copy** | `Ctrl+C` |
 | **Cut** | `Ctrl+X` |
 | **Paste** | `Ctrl+V` |
+| **Go to Line** | `Ctrl+G` |
 | **Select All** | `Ctrl+A` |
 | **Select Text**| `Shift + Arrays` |
 | **Indent** | `TAB` |
