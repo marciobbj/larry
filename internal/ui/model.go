@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
-	"golang.design/x/clipboard"
 )
 
 // KeyMap defines key bindings for editor shortcuts.
@@ -209,6 +210,65 @@ func (m *Model) getSelectedText() string {
 	return string(runes[startIdx:endIdx])
 }
 
+// clipboardWrite writes text to the system clipboard.
+// Supports Linux (Wayland/X11), macOS, and Windows.
+func clipboardWrite(text string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS
+		cmd := exec.Command("pbcopy")
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+
+	case "windows":
+		// Windows - use clip.exe
+		cmd := exec.Command("cmd", "/c", "clip")
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+
+	default:
+		// Linux - try Wayland first, then X11
+		cmd := exec.Command("wl-copy", text)
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+		cmd = exec.Command("xclip", "-selection", "clipboard")
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+	}
+}
+
+// clipboardRead reads text from the system clipboard.
+// Supports Linux (Wayland/X11), macOS, and Windows.
+func clipboardRead() string {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS
+		cmd = exec.Command("pbpaste")
+
+	case "windows":
+		// Windows - use PowerShell
+		cmd = exec.Command("powershell", "-command", "Get-Clipboard")
+
+	default:
+		// Linux - try Wayland first, then X11
+		cmd = exec.Command("wl-paste", "-n")
+		output, err := cmd.Output()
+		if err == nil {
+			return string(output)
+		}
+		cmd = exec.Command("xclip", "-selection", "clipboard", "-o")
+	}
+
+	output, err := cmd.Output()
+	if err == nil {
+		return strings.TrimSuffix(string(output), "\r\n") // Windows adds CRLF
+	}
+	return ""
+}
+
 func Write(errorMessage string) {
 	f, err := os.OpenFile("larry.log", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 
@@ -257,7 +317,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.KeyMap.Copy) && m.selecting {
 			text := m.getSelectedText()
 			if text != "" {
-				clipboard.Write(clipboard.FmtText, []byte(text))
+				clipboardWrite(text)
 			}
 			handled = true
 		}
@@ -265,7 +325,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.KeyMap.Cut) && m.selecting {
 			text := m.getSelectedText()
 			if text != "" {
-				clipboard.Write(clipboard.FmtText, []byte(text))
+				clipboardWrite(text)
 			}
 			m.deleteSelection()
 			handled = true
@@ -277,9 +337,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.deleteSelection()
 			}
 			// Get text from clipboard and insert it
-			data := clipboard.Read(clipboard.FmtText)
+			data := clipboardRead()
 			if len(data) > 0 {
-				m.TextArea.InsertString(string(data))
+				m.TextArea.InsertString(data)
 			}
 			handled = true
 		}

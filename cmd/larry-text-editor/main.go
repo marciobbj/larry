@@ -6,11 +6,21 @@ package main
 import (
 	"fmt"
 	"os"
-	tea "github.com/charmbracelet/bubbletea"
+
 	"larry-text-editor/internal/ui"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"golang.design/x/clipboard"
 )
 
 func main() {
+	// Initialize the system clipboard
+	err := clipboard.Init()
+	if err != nil {
+		fmt.Printf("Warning: Could not initialize clipboard: %v\n", err)
+		// Continue anyway - clipboard features may not work
+	}
+
 	// Initialize the model
 	m := ui.InitialModel()
 
