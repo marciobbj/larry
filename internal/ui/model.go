@@ -243,7 +243,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selecting = true
 			m.startRow = 0
 			m.startCol = 0
+			// Move cursor to the very end of the document
+			lines := strings.Split(m.TextArea.Value(), "\n")
+			// Go to the last line
+			for getRow(m.TextArea) < len(lines)-1 {
+				m.TextArea.CursorDown()
+			}
+			// Go to the end of the last line
 			m.TextArea.CursorEnd()
+			handled = true
 		}
 		// Copy selected text to clipboard
 		if key.Matches(msg, m.KeyMap.Copy) && m.selecting {
