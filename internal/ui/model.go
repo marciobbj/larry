@@ -4,6 +4,10 @@
 package ui
 
 import (
+	"fmt"
+	"log"
+	"os"
+	"strings"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,22 +16,35 @@ import (
 // KeyMap defines key bindings for editor shortcuts.
 // This allows easy customization of key mappings.
 type KeyMap struct {
-	Quit key.Binding
+	Quit               key.Binding
+	SelectAll          key.Binding
+	MoveSelectionDown  key.Binding
+	MoveSelectionUp    key.Binding
+	MoveSelectionLeft  key.Binding
+	MoveSelectionRight key.Binding
 }
 
 // DefaultKeyMap provides the default key bindings.
 var DefaultKeyMap = KeyMap{
-	Quit: key.NewBinding(key.WithKeys("ctrl+c", "q")),
+	Quit:               key.NewBinding(key.WithKeys("ctrl+c")),
+	SelectAll:          key.NewBinding(key.WithKeys("ctrl+a")),
+	MoveSelectionDown:  key.NewBinding(key.WithKeys("shift+down")),
+	MoveSelectionLeft:  key.NewBinding(key.WithKeys("shift+left")),
+	MoveSelectionRight: key.NewBinding(key.WithKeys("shift+right")),
+	MoveSelectionUp:    key.NewBinding(key.WithKeys("shift+up")),
 }
 
 // Model represents the state of the text editor.
 type Model struct {
-	TextArea textarea.Model // Text area for editing with cursor support
-	Width    int            // Terminal width
-	Height   int            // Terminal height
-	FileName string         // Current file name (for save/load)
-	KeyMap   KeyMap         // Key bindings for shortcuts
-	Quitting bool           // Flag to indicate if the app is quitting
+	TextArea  textarea.Model // Text area for editing with cursor support
+	Width     int            // Terminal width
+	Height    int            // Terminal height
+	FileName  string         // Current file name (for save/load)
+	KeyMap    KeyMap         // Key bindings for shortcuts
+	Quitting  bool           // Flag to indicate if the app is quitting
+	startRow  int            // selecting starting row
+	startCol  int            // selecting starting col
+	selecting bool
 }
 
 // InitialModel creates and returns a new initial model.
@@ -35,17 +52,44 @@ func InitialModel() Model {
 	ta := textarea.New()
 	ta.SetWidth(80)
 	ta.SetHeight(20)
-	ta.Placeholder = "Start typing..."
+	ta.Placeholder = "Digite algo..."
 	ta.Focus()
+	//styles.setupStyle()
 
 	return Model{
-		TextArea: ta,
-		Width:    80,
-		Height:   20,
-		FileName: "untitled.txt",
-		KeyMap:   DefaultKeyMap,
-		Quitting: false,
+		TextArea:  ta,
+		Width:     80,
+		Height:    20,
+		FileName:  "untitled.txt",
+		KeyMap:    DefaultKeyMap,
+		Quitting:  false,
+		startRow:  0,
+		startCol:  0,
+		selecting: false,
 	}
+}
+
+// getCol returns the current column (character offset) of the cursor using the public API.
+func getCol(ta textarea.Model) int {
+	return ta.LineInfo().CharOffset
+}
+
+// getRow returns the current row (line number) of the cursor using the public API.
+func getRow(ta textarea.Model) int {
+	return ta.Line()
+}
+
+func Write(errorMessage string) {
+	f, err := os.OpenFile("larry.log", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
+
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+
+	defer f.Close()
+
+	log.SetOutput(f)
+	log.Println(errorMessage)
 }
 
 // Init initializes the model. No initial commands needed.
@@ -56,6 +100,7 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages and updates the model state.
 // It intercepts quit commands and delegates other input to the textarea.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	handled := false
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Intercept quit before passing to textarea
@@ -63,6 +108,88 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Quitting = true
 			return m, tea.Quit
 		}
+		// Select all text
+		if key.Matches(msg, m.KeyMap.SelectAll) {
+			m.selecting = true
+			m.startRow = 0
+			m.startCol = 0
+			m.TextArea.CursorEnd()
+		}
+		if key.Matches(msg, m.KeyMap.MoveSelectionDown) {
+			handled = true
+			if !m.selecting {
+				m.selecting = true
+				// Salva a posição de ancoragem
+				m.startRow = getRow(m.TextArea)
+				m.startCol = getCol(m.TextArea)
+			}
+			m.TextArea.CursorDown()
+		}
+		if key.Matches(msg, m.KeyMap.MoveSelectionUp) {
+			handled = true
+			if !m.selecting {
+				m.selecting = true
+				// Salva a posição de ancoragem
+				m.startRow = getRow(m.TextArea)
+				m.startCol = getCol(m.TextArea)
+			}
+			m.TextArea.CursorUp()
+		}
+		if key.Matches(msg, m.KeyMap.MoveSelectionLeft) {
+			handled = true
+			if !m.selecting {
+				m.selecting = true
+				// Salva a posição de ancoragem
+				m.startRow = getRow(m.TextArea)
+				m.startCol = getCol(m.TextArea)
+			}
+			// Move cursor left by setting cursor position
+			col := getCol(m.TextArea)
+			if col > 0 {
+				m.TextArea.SetCursor(col - 1)
+			} else {
+				// Move to end of previous line
+				row := getRow(m.TextArea)
+				if row > 0 {
+					m.TextArea.CursorUp()
+					m.TextArea.CursorEnd()
+				}
+			}
+		}
+		if key.Matches(msg, m.KeyMap.MoveSelectionRight) {
+			handled = true
+			if !m.selecting {
+				m.selecting = true
+				// Salva a posição de ancoragem
+				m.startRow = getRow(m.TextArea)
+				m.startCol = getCol(m.TextArea)
+			}
+			// Move cursor right
+			lines := strings.Split(m.TextArea.Value(), "\n")
+			row := getRow(m.TextArea)
+			col := getCol(m.TextArea)
+			if row < len(lines) && col < len(lines[row]) {
+				m.TextArea.SetCursor(col + 1)
+			} else if row < len(lines)-1 {
+				// Move to start of next line
+				m.TextArea.CursorDown()
+				m.TextArea.CursorStart()
+			}
+		}
+		// Cancel selection on arrow keys without shift
+		// Check if it's a plain arrow key (not with shift modifier)
+		if !m.selecting {
+			// Already not selecting, nothing to do
+		} else if msg.Type == tea.KeyLeft || msg.Type == tea.KeyRight || msg.Type == tea.KeyUp || msg.Type == tea.KeyDown {
+			// Check if shift is NOT pressed - plain arrow keys cancel selection
+			if !key.Matches(msg, m.KeyMap.MoveSelectionDown) &&
+				!key.Matches(msg, m.KeyMap.MoveSelectionUp) &&
+				!key.Matches(msg, m.KeyMap.MoveSelectionLeft) &&
+				!key.Matches(msg, m.KeyMap.MoveSelectionRight) {
+				m.selecting = false
+			}
+		}
+		// TODO add partial text selection
 	case tea.WindowSizeMsg:
 		// Update textarea size on terminal resize
 		m.Width = msg.Width
@@ -71,9 +198,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.TextArea.SetHeight(msg.Height)
 	}
 
-	// Delegate other messages to textarea
 	var taCmd tea.Cmd
-	m.TextArea, taCmd = m.TextArea.Update(msg)
+	if !handled {
+		m.TextArea, taCmd = m.TextArea.Update(msg)
+	}
 	return m, taCmd
 }
 
@@ -81,9 +209,88 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // It displays the textarea with cursor.
 func (m Model) View() string {
 	if m.Quitting {
-		return "Goodbye!\n"
+		return "Tchau!\n"
 	}
+	if m.selecting {
+		val := m.TextArea.Value()
+		if val == "" {
+			return m.TextArea.View()
+		}
 
+		startIdx := getAbsoluteIndex(val, m.startRow, m.startCol)
+		endIdx := getAbsoluteIndex(val, getRow(m.TextArea), getCol(m.TextArea))
+
+		if startIdx > endIdx {
+			startIdx, endIdx = endIdx, startIdx
+		}
+
+		// Build the highlighted text using ANSI escape codes for orange background and black text
+		var result strings.Builder
+		for i, ch := range val {
+			if i >= startIdx && i < endIdx {
+				// Use orange background (color 208) and black text (color 0)
+				result.WriteString("\x1b[48;5;208;38;5;0m")
+				result.WriteRune(ch)
+				result.WriteString("\x1b[0m")
+			} else {
+				result.WriteRune(ch)
+			}
+		}
+
+		highlighted := result.String()
+		allLines := strings.Split(highlighted, "\n")
+
+		// Render all lines with optional line numbers
+		var s strings.Builder
+		for i, line := range allLines {
+			if m.TextArea.ShowLineNumbers {
+				ln := fmt.Sprintf(" %3d ", i+1)
+				s.WriteString(ln + line + "\n")
+			} else {
+				s.WriteString(line + "\n")
+			}
+		}
+		return s.String()
+	}
 	// Render the textarea (cursor is handled by textarea)
 	return m.TextArea.View()
+}
+
+// getAbsoluteIndex returns the absolute character index for a given row and col.
+// It performs bounds checking to avoid index out of range errors.
+func getAbsoluteIndex(value string, row, col int) int {
+	if value == "" {
+		return 0
+	}
+
+	lines := strings.Split(value, "\n")
+
+	// Ensure row is within bounds
+	if row < 0 {
+		row = 0
+	}
+	if row >= len(lines) {
+		row = len(lines) - 1
+	}
+
+	index := 0
+	for i := 0; i < row; i++ {
+		index += len(lines[i]) + 1 // +1 for the \n
+	}
+
+	// Ensure col is within bounds of the current line
+	if col < 0 {
+		col = 0
+	}
+	if row < len(lines) && col > len(lines[row]) {
+		col = len(lines[row])
+	}
+
+	result := index + col
+	// Final bounds check against entire string length
+	if result > len(value) {
+		result = len(value)
+	}
+
+	return result
 }

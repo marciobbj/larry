@@ -9,8 +9,9 @@ A minimalist general purpose terminal-based text editor written in Go.
 - Enter for new lines
 - Automatic scrolling
 - Simple status line showing file name and cursor position
-- Quit with Ctrl+C or 'q'
+- Quit with Ctrl+C
 - Modular keymap for easy shortcut customization
+- Selecting text with shift + arrow keys
 
 ## Building and Running
 
@@ -42,6 +43,7 @@ To modify shortcuts, edit the `DefaultKeyMap` struct and update the keys as need
 ## Future Enhancements
 
 - [x] Line numbers
+- [x] Selecting text
 - [] Closing and Opening existing files
 - [] Layout and UI improvements
 - [] File loading and saving
