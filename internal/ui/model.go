@@ -35,6 +35,7 @@ type KeyMap struct {
 	Delete             key.Binding
 	Undo               key.Binding
 	Redo               key.Binding
+	GoToLine           key.Binding
 }
 
 var DefaultKeyMap = KeyMap{
@@ -56,6 +57,7 @@ var DefaultKeyMap = KeyMap{
 	Delete:             key.NewBinding(key.WithKeys("backspace", "delete")),
 	Undo:               key.NewBinding(key.WithKeys("ctrl+z")),
 	Redo:               key.NewBinding(key.WithKeys("ctrl+shift+z")),
+	GoToLine:           key.NewBinding(key.WithKeys("ctrl+g")),
 }
 
 var (
@@ -94,6 +96,7 @@ type Model struct {
 	selecting  bool
 	saving     bool
 	loading    bool
+	goToLine   bool
 	textInput  textinput.Model
 	filePicker filepicker.Model
 	statusMsg  string
@@ -302,6 +305,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.FileName = filename
 				}
 				m.saving = false
+				return m, nil
+			}
+		}
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+
+	if m.goToLine {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.goToLine = false
+				return m, nil
+			case tea.KeyEnter:
+				lineStr := m.textInput.Value()
+				var targetLine int
+				_, err := fmt.Sscanf(lineStr, "%d", &targetLine)
+				if err == nil {
+					targetLine-- // Adjust from 1-indexed UI to 0-indexed code
+					if targetLine < 0 {
+						targetLine = 0
+					}
+					if targetLine >= len(m.Lines) {
+						targetLine = len(m.Lines) - 1
+					}
+					if targetLine < 0 {
+						targetLine = 0
+					}
+					m.CursorRow = targetLine
+					m.CursorCol = 0
+					m = m.updateViewport()
+				}
+				m.goToLine = false
 				return m, nil
 			}
 		}
@@ -549,6 +587,9 @@ func (m Model) View() string {
 	if m.saving {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
 	}
+	if m.goToLine {
+		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
+	}
 	if m.loading {
 		// Calculate empty lines to push picker to bottom
 		pickerView := m.filePicker.View()
@@ -583,6 +624,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.saving = true
 		m.textInput.Focus()
 		m.textInput.SetValue(m.FileName)
+		m.textInput.Prompt = "Filename: "
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.GoToLine):
+		m.goToLine = true
+		m.textInput.Focus()
+		m.textInput.SetValue("")
+		lineCount := len(m.Lines)
+		if lineCount == 0 {
+			lineCount = 1
+		}
+		m.textInput.Prompt = fmt.Sprintf("Go to line (1-%d): ", lineCount)
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Open):
