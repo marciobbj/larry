@@ -548,7 +548,17 @@ func (m Model) View() string {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
 	}
 	if m.loading {
-		return fmt.Sprintf("%s\n\n%s", baseView, m.filePicker.View())
+		// Calculate empty lines to push picker to bottom
+		pickerView := m.filePicker.View()
+
+		// Create a full-height string for the layout
+		return lipgloss.Place(
+			m.Width, m.Height,
+			lipgloss.Left, lipgloss.Bottom,
+			pickerView,
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")), // transparent/black
+		)
 	}
 	if m.statusMsg != "" {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.statusMsg)
@@ -575,11 +585,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	// Open
+	// Open
 	case key.Matches(msg, m.KeyMap.Open):
 		m.loading = true
 		m.filePicker.CurrentDirectory, _ = os.Getwd()
-		m.filePicker.Init()
-		return m, nil
+		return m, m.filePicker.Init()
 
 	// Select All
 	case key.Matches(msg, m.KeyMap.SelectAll):
