@@ -1,6 +1,6 @@
 # Larry - The Text Editor
 
-![Larry The Cat](assets/larry_cat.png)
+<img src="assets/larry_cat.png" alt="Larry The Cat" width="200">
 
 A minimalist, high-performance TUI text editor written in Go.
 
