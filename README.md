@@ -48,6 +48,8 @@ A minimalist, high-performance TUI text editor written in Go.
 | **Paste** | `Ctrl+V` |
 | **Select All** | `Ctrl+A` |
 | **Select Text**| `Shift + Arrays` |
+| **Indent** | `TAB` |
+| **Dedent** | `Shift+Tab` |
 | **Navigation** | Arrow Keys |
 
 ## Roadmap
@@ -61,3 +63,5 @@ A minimalist, high-performance TUI text editor written in Go.
 - [x] Undo/redo functionality
 - [ ] Search / Find & Replace
 - [ ] Markdown instant visualization
+- [ ] LSP support
+- [ ] Config file support

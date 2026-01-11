@@ -824,6 +824,54 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 
+	// Tab
+	case msg.Type == tea.KeyTab:
+		if m.selecting {
+			text := m.getSelectedText()
+			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
+			m = m.deleteSelectedText()
+		}
+
+		tab := "    " // 4 spaces
+		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: tab})
+		m = m.insertTextAtCursor(tab)
+		return m, nil
+
+	// Shift+Tab (Dedent)
+	case msg.Type == tea.KeyShiftTab:
+		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
+			line := m.Lines[m.CursorRow]
+			// Check for leading spaces
+			spacesToRemove := 0
+			for i, r := range line {
+				if i >= 4 {
+					break
+				}
+				if r == ' ' {
+					spacesToRemove++
+				} else {
+					break
+				}
+			}
+
+			if spacesToRemove > 0 {
+				dedentText := line[:spacesToRemove]
+
+				// Record Undo (removed text at start of line: Col 0)
+				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: 0, Text: dedentText})
+
+				// Remove from line
+				m.Lines[m.CursorRow] = line[spacesToRemove:]
+
+				// Adjust cursor
+				m.CursorCol -= spacesToRemove
+				if m.CursorCol < 0 {
+					m.CursorCol = 0
+				}
+			}
+		}
+		return m, nil
+
 	// Enter
 	case msg.Type == tea.KeyEnter:
 		if m.selecting {
