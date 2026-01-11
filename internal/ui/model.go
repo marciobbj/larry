@@ -80,24 +80,12 @@ func InitialModel() Model {
 }
 
 // getCol returns the current column (character offset) within the logical line.
-// This handles wrapped lines correctly by calculating the position in the unwrapped line.
 func getCol(ta textarea.Model) int {
-	// LineInfo().CharOffset gives the offset within the current wrapped segment
-	// We need to calculate the actual offset in the logical line
 	li := ta.LineInfo()
-
-	// Get the text width to understand wrapping
-	width := ta.Width()
-	if ta.ShowLineNumbers {
-		width -= 6
-	}
-	if width < 1 {
-		width = 1
-	}
-
-	// RowOffset tells us which wrapped row we're on within the current logical line
-	// CharOffset tells us the position within that wrapped row
-	return li.RowOffset*width + li.CharOffset
+	// StartColumn is the logical index where the current wrapped line starts.
+	// CharOffset is the offset within this wrapped line.
+	// Together they give the correct logical column index.
+	return li.StartColumn + li.CharOffset
 }
 
 // getRow returns the current row (line number) of the cursor using the public API.
@@ -305,13 +293,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startRow = 0
 			m.startCol = 0
 			// Move cursor to the very end of the document
-			lines := strings.Split(m.TextArea.Value(), "\n")
-			// Go to the last line
-			for getRow(m.TextArea) < len(lines)-1 {
+			val := m.TextArea.Value()
+			lines := strings.Split(val, "\n")
+			lastLineIdx := len(lines) - 1
+			if lastLineIdx < 0 {
+				lastLineIdx = 0
+			}
+			lastLineLen := 0
+			if lastLineIdx < len(lines) {
+				lastLineLen = len([]rune(lines[lastLineIdx]))
+			}
+
+			// Navigate to last line
+			for getRow(m.TextArea) < lastLineIdx {
 				m.TextArea.CursorDown()
 			}
-			// Go to the end of the last line
-			m.TextArea.CursorEnd()
+
+			// Set cursor directly to end of line
+			m.TextArea.SetCursor(lastLineLen)
 			handled = true
 		}
 		// Copy selected text to clipboard
