@@ -66,6 +66,30 @@ Larry offers a perfect balance for users who need more power than Nano without t
 | **Dedent** | `Shift+Tab` |
 | **Navigation** | Arrow Keys |
 
+## Configuration
+
+Larry supports configuration via a JSON file.
+
+### Usage
+Run Larry with the `-config` flag:
+```bash
+./larry -config config.json
+```
+
+### Configuration Options (`config.json`)
+```json
+{
+  "theme": "dracula",
+  "tab_width": 4,
+  "line_numbers": true
+}
+```
+| Field | Description | Default |
+|-------|-------------|---------|
+| `theme` | Syntax highlighting theme (e.g., `dracula`, `monokai`, `nord`, `github`) | `dracula` |
+| `tab_width` | Number of spaces for a tab character | `4` |
+| `line_numbers` | Show or hide line numbers | `true` |
+
 ## Roadmap
 
 - [x] Line numbers
@@ -79,10 +103,10 @@ Larry offers a perfect balance for users who need more power than Nano without t
 - [x] Go to line
 - [ ] Markdown instant visualization
 - [ ] LSP support
-- [ ] Config file support
+- [x] Config file support
 - [ ] Plugin system
-- [ ] Theme support
-- [ ] Add Help Menu and Docs
+- [] Theme support
+- [x] Add Help Menu and Docs
 - [ ] Add to a remote package manager
 - [ ] Improve resizing and responsiveness (add scaling etc)
 - [ ] Add some smart larry-movements like ctrl+down and ctrl+up to move cursor faster down and up - ctrl+left and ctrl+right to make the cursor to jump words
