@@ -96,6 +96,83 @@ func getRow(ta textarea.Model) int {
 	return ta.Line()
 }
 
+// deleteSelection removes the selected text and positions cursor at start of selection.
+// Returns true if text was deleted, false if there was no selection.
+func (m *Model) deleteSelection() bool {
+	if !m.selecting {
+		return false
+	}
+
+	val := m.TextArea.Value()
+	if val == "" {
+		m.selecting = false
+		return false
+	}
+
+	// Get current cursor position
+	curRow := getRow(m.TextArea)
+	curCol := getCol(m.TextArea)
+
+	startIdx := getAbsoluteIndex(val, m.startRow, m.startCol)
+	endIdx := getAbsoluteIndex(val, curRow, curCol)
+
+	// Determine which position is the "start" (leftmost) of the selection
+	targetRow := m.startRow
+	targetCol := m.startCol
+	if startIdx > endIdx {
+		startIdx, endIdx = endIdx, startIdx
+		targetRow = curRow
+		targetCol = curCol
+	}
+
+	// Convert to rune slice to handle unicode correctly
+	runes := []rune(val)
+	if startIdx >= len(runes) {
+		startIdx = len(runes)
+	}
+	if endIdx > len(runes) {
+		endIdx = len(runes)
+	}
+
+	// Create new content without selected text
+	newRunes := append(runes[:startIdx], runes[endIdx:]...)
+	newVal := string(newRunes)
+
+	// Set the new value
+	m.TextArea.SetValue(newVal)
+
+	// Position cursor at the start of where selection was
+	lines := strings.Split(newVal, "\n")
+	if targetRow >= len(lines) {
+		targetRow = len(lines) - 1
+	}
+	if targetRow < 0 {
+		targetRow = 0
+	}
+
+	// Move cursor to beginning of document (line 0, col 0)
+	// CursorStart moves to start of current line, we need to go to line 0 first
+	for getRow(m.TextArea) > 0 {
+		m.TextArea.CursorUp()
+	}
+	m.TextArea.CursorStart()
+
+	// Navigate to target row
+	for i := 0; i < targetRow; i++ {
+		m.TextArea.CursorDown()
+	}
+
+	// Set column position - ensure it's within bounds of the new line
+	if targetRow < len(lines) && targetCol > len([]rune(lines[targetRow])) {
+		targetCol = len([]rune(lines[targetRow]))
+	}
+	m.TextArea.SetCursor(targetCol)
+
+	// Clear selection state
+	m.selecting = false
+	return true
+}
+
 func Write(errorMessage string) {
 	f, err := os.OpenFile("larry.log", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 
@@ -131,6 +208,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startRow = 0
 			m.startCol = 0
 			m.TextArea.CursorEnd()
+		}
+		// Handle delete/backspace when text is selected
+		if m.selecting && (msg.Type == tea.KeyDelete || msg.Type == tea.KeyBackspace) {
+			m.deleteSelection()
+			handled = true
+		}
+		// Handle character input when text is selected - replace selection with typed char
+		if m.selecting && msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
+			m.deleteSelection()
+			// Insert the typed character(s) - let textarea handle it
+			handled = false // Let textarea process the input
 		}
 		if key.Matches(msg, m.KeyMap.MoveSelectionDown) {
 			handled = true
