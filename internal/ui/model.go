@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -224,40 +225,46 @@ func (m Model) View() string {
 			startIdx, endIdx = endIdx, startIdx
 		}
 
-		// Build the highlighted text using ANSI escape codes for orange background and black text
-		var result strings.Builder
-		for i, ch := range val {
-			if i >= startIdx && i < endIdx {
-				// Use orange background (color 208) and black text (color 0)
-				result.WriteString("\x1b[48;5;208;38;5;0m")
-				result.WriteRune(ch)
-				result.WriteString("\x1b[0m")
-			} else {
-				result.WriteRune(ch)
-			}
-		}
-
-		highlighted := result.String()
-		allLines := strings.Split(highlighted, "\n")
-
-		// Render all lines with optional line numbers
+		// Process line by line to properly handle line numbers
+		lines := strings.Split(val, "\n")
 		var s strings.Builder
-		for i, line := range allLines {
+		runeIdx := 0
+
+		for lineNum, line := range lines {
+			// Add line number first (before any highlighting)
 			if m.TextArea.ShowLineNumbers {
-				ln := fmt.Sprintf(" %3d ", i+1)
-				s.WriteString(ln + line + "\n")
-			} else {
-				s.WriteString(line + "\n")
+				ln := fmt.Sprintf(" %3d ", lineNum+1)
+				s.WriteString(ln)
 			}
+
+			// Process each character in the line
+			lineRunes := []rune(line)
+			for _, ch := range lineRunes {
+				if runeIdx >= startIdx && runeIdx < endIdx {
+					// Use orange background (color 208) and black text (color 0)
+					s.WriteString("\x1b[48;5;208;38;5;0m")
+					s.WriteRune(ch)
+					s.WriteString("\x1b[0m")
+				} else {
+					s.WriteRune(ch)
+				}
+				runeIdx++
+			}
+
+			// Add newline and count it in the rune index
+			s.WriteString("\n")
+			runeIdx++ // Count the \n character
 		}
+
 		return s.String()
 	}
 	// Render the textarea (cursor is handled by textarea)
 	return m.TextArea.View()
 }
 
-// getAbsoluteIndex returns the absolute character index for a given row and col.
+// getAbsoluteIndex returns the absolute rune index for a given row and col.
 // It performs bounds checking to avoid index out of range errors.
+// This function works with rune indices (character positions), not byte indices.
 func getAbsoluteIndex(value string, row, col int) int {
 	if value == "" {
 		return 0
@@ -273,24 +280,28 @@ func getAbsoluteIndex(value string, row, col int) int {
 		row = len(lines) - 1
 	}
 
-	index := 0
+	// Calculate rune index
+	runeIndex := 0
 	for i := 0; i < row; i++ {
-		index += len(lines[i]) + 1 // +1 for the \n
+		runeIndex += len([]rune(lines[i])) + 1 // +1 for the \n
 	}
 
-	// Ensure col is within bounds of the current line
+	// Ensure col is within bounds of the current line (in runes)
+	lineRunes := []rune(lines[row])
 	if col < 0 {
 		col = 0
 	}
-	if row < len(lines) && col > len(lines[row]) {
-		col = len(lines[row])
+	if col > len(lineRunes) {
+		col = len(lineRunes)
 	}
 
-	result := index + col
-	// Final bounds check against entire string length
-	if result > len(value) {
-		result = len(value)
+	runeIndex += col
+
+	// Final bounds check against total rune count
+	totalRunes := len([]rune(value))
+	if runeIndex > totalRunes {
+		runeIndex = totalRunes
 	}
 
-	return result
+	return runeIndex
 }
