@@ -22,7 +22,9 @@ A minimalist, high-performance TUI text editor written in Go.
     - Absolute line numbers
     - Visual cursor and selection highlighting
     - Status reporting (without clutter)
-    - Its lying between VIM and Nano 
+
+## Why should I use Larry?
+If you're looking for a text editor that strikes the perfect balance, Larry is more powerful than Nano but simpler than VimLarry is exactly what you need. It’s the ideal choice for users who want robust features without the complexity of Vim. It's very fast and it runs in your terminal.
 
 ## Installation
 
