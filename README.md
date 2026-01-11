@@ -44,11 +44,11 @@ To modify shortcuts, edit the `DefaultKeyMap` struct and update the keys as need
 
 - [x] Line numbers
 - [x] Selecting text
-- [] Closing and Opening existing files
+- [x] File picker
+- [x] Optimized file loading
 - [] Layout and UI improvements
-- [] File loading and saving
-- [] Horizontal scrolling
-- [] Word wrapping
+- [x] File loading and saving
+- [x] Word wrapping
 - [] Syntax highlighting
 - [] Undo/redo functionality
 - [] Markdown instant visualization
