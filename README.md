@@ -63,7 +63,7 @@ A minimalist, high-performance TUI text editor written in Go.
 - [x] Line numbers
 - [x] Selecting text
 - [x] File picker
-- [x] Optimized file loading (Engine 2.0)
+- [x] Optimized file loading
 - [x] File loading and saving
 - [x] Syntax highlighting
 - [x] Undo/redo functionality
