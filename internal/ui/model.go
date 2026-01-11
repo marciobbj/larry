@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -32,6 +33,11 @@ type KeyMap struct {
 	Cut                key.Binding
 	Save               key.Binding
 	Open               key.Binding
+	CursorUp           key.Binding
+	CursorDown         key.Binding
+	CursorLeft         key.Binding
+	CursorRight        key.Binding
+	Delete             key.Binding
 }
 
 // DefaultKeyMap provides the default key bindings.
@@ -47,7 +53,22 @@ var DefaultKeyMap = KeyMap{
 	Cut:                key.NewBinding(key.WithKeys("ctrl+x")),
 	Save:               key.NewBinding(key.WithKeys("ctrl+s")),
 	Open:               key.NewBinding(key.WithKeys("ctrl+o")),
+	CursorUp:           key.NewBinding(key.WithKeys("up")),
+	CursorDown:         key.NewBinding(key.WithKeys("down")),
+	CursorLeft:         key.NewBinding(key.WithKeys("left")),
+	CursorRight:        key.NewBinding(key.WithKeys("right")),
+	Delete:             key.NewBinding(key.WithKeys("backspace", "delete")),
 }
+
+// Global Styles
+var (
+	styleCursor   = lipgloss.NewStyle().Background(lipgloss.Color("252")).Foreground(lipgloss.Color("0"))
+	styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0"))
+	styleFile     = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	styleDir      = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
+	lineNumStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	borderStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+)
 
 // Model represents the state of the text editor.
 type Model struct {
@@ -65,6 +86,10 @@ type Model struct {
 	textInput  textinput.Model  // Input for filename
 	filePicker filepicker.Model // File picker for opening files
 	statusMsg  string           // Status message to display
+	yOffset    int              // Vertical scroll offset (viewport)
+	Lines      []string         // File content as lines
+	CursorRow  int              // Cursor Row
+	CursorCol  int              // Cursor Col
 }
 
 // InitialModel creates and returns a new initial model.
@@ -118,6 +143,9 @@ func InitialModel(filename string, content string) Model {
 		saving:     false,
 		loading:    false,
 		filePicker: fp,
+		Lines:      strings.Split(content, "\n"),
+		CursorRow:  0,
+		CursorCol:  0,
 	}
 }
 
@@ -212,94 +240,6 @@ func (m *Model) deleteSelection() bool {
 	return true
 }
 
-// getSelectedText returns the currently selected text.
-func (m *Model) getSelectedText() string {
-	if !m.selecting {
-		return ""
-	}
-
-	val := m.TextArea.Value()
-	if val == "" {
-		return ""
-	}
-
-	startIdx := getAbsoluteIndex(val, m.startRow, m.startCol)
-	endIdx := getAbsoluteIndex(val, getRow(m.TextArea), getCol(m.TextArea))
-
-	if startIdx > endIdx {
-		startIdx, endIdx = endIdx, startIdx
-	}
-
-	runes := []rune(val)
-	if startIdx >= len(runes) {
-		return ""
-	}
-	if endIdx > len(runes) {
-		endIdx = len(runes)
-	}
-
-	return string(runes[startIdx:endIdx])
-}
-
-// clipboardWrite writes text to the system clipboard.
-// Supports Linux (Wayland/X11), macOS, and Windows.
-func clipboardWrite(text string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS
-		cmd := exec.Command("pbcopy")
-		cmd.Stdin = strings.NewReader(text)
-		return cmd.Run()
-
-	case "windows":
-		// Windows - use clip.exe
-		cmd := exec.Command("cmd", "/c", "clip")
-		cmd.Stdin = strings.NewReader(text)
-		return cmd.Run()
-
-	default:
-		// Linux - try Wayland first, then X11
-		cmd := exec.Command("wl-copy", text)
-		if err := cmd.Run(); err == nil {
-			return nil
-		}
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-		cmd.Stdin = strings.NewReader(text)
-		return cmd.Run()
-	}
-}
-
-// clipboardRead reads text from the system clipboard.
-// Supports Linux (Wayland/X11), macOS, and Windows.
-func clipboardRead() string {
-	var cmd *exec.Cmd
-
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS
-		cmd = exec.Command("pbpaste")
-
-	case "windows":
-		// Windows - use PowerShell
-		cmd = exec.Command("powershell", "-command", "Get-Clipboard")
-
-	default:
-		// Linux - try Wayland first, then X11
-		cmd = exec.Command("wl-paste", "-n")
-		output, err := cmd.Output()
-		if err == nil {
-			return string(output)
-		}
-		cmd = exec.Command("xclip", "-selection", "clipboard", "-o")
-	}
-
-	output, err := cmd.Output()
-	if err == nil {
-		return strings.TrimSuffix(string(output), "\r\n") // Windows adds CRLF
-	}
-	return ""
-}
-
 func Write(errorMessage string) {
 	f, err := os.OpenFile("larry.log", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 
@@ -321,8 +261,8 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages and updates the model state.
 // It intercepts quit commands and delegates other input to the textarea.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	handled := false
 
+	// Handle Loading Mode (Open)
 	// Handle Loading Mode (Open)
 	if m.loading {
 		var cmd tea.Cmd
@@ -332,22 +272,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				m.statusMsg = "Error opening: " + err.Error()
 			} else {
-				m.TextArea.SetValue(string(content))
+				// Replaced TextArea logic with manual Lines logic
+				m.Lines = strings.Split(string(content), "\n")
 				m.statusMsg = "Opened: " + path
 				m.FileName = path
-				m.TextArea.CursorStart()
-				for getRow(m.TextArea) > 0 {
-					m.TextArea.CursorUp()
-				}
+				m.CursorRow = 0
+				m.CursorCol = 0
+				m.yOffset = 0
+				m.selecting = false
 			}
 			m.loading = false
-			m.TextArea.Focus()
 			return m, cmd
 		}
 		// Handle user manual quit via Esc
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
 			m.loading = false
-			m.TextArea.Focus()
 		}
 		return m, cmd
 	}
@@ -359,14 +298,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.Type {
 			case tea.KeyEsc:
 				m.saving = false
-				m.TextArea.Focus()
 				return m, nil
 			case tea.KeyEnter:
 				filename := m.textInput.Value()
 				if filename == "" {
 					filename = "untitled.txt"
 				}
-				err := os.WriteFile(filename, []byte(m.TextArea.Value()), 0644)
+				// Save from m.Lines
+				content := strings.Join(m.Lines, "\n")
+				err := os.WriteFile(filename, []byte(content), 0644)
 				if err != nil {
 					m.statusMsg = "Error saving: " + err.Error()
 				} else {
@@ -374,7 +314,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.FileName = filename
 				}
 				m.saving = false
-				m.TextArea.Focus()
 				return m, nil
 			}
 		}
@@ -385,186 +324,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Intercept quit before passing to textarea
-		if key.Matches(msg, m.KeyMap.Quit) {
-			m.Quitting = true
-			return m, tea.Quit
-		}
-
-		if key.Matches(msg, m.KeyMap.Save) {
-			m.saving = true
-			m.textInput.Prompt = "Filename: "
-			m.textInput.SetValue(m.FileName)
-			m.textInput.Focus()
-			return m, nil
-		}
-
-		if key.Matches(msg, m.KeyMap.Open) {
-			m.loading = true
-			wd, err := os.Getwd()
-			if err != nil {
-				m.statusMsg = "Error getting wd: " + err.Error()
-			} else {
-				m.filePicker.CurrentDirectory = wd
-			}
-
-			// DEBUG: Check permissions manually
-			files, err := os.ReadDir(wd)
-			if err != nil {
-				m.statusMsg = "ReadDir Error: " + err.Error()
-			} else {
-				m.statusMsg = fmt.Sprintf("Dir has %d files. Loading...", len(files))
-			}
-
-			// Initialize/update file list
-			cmd := m.filePicker.Init()
+		var cmd tea.Cmd
+		m, cmd = m.handleKey(msg)
+		if cmd != nil {
 			return m, cmd
 		}
+		m = m.updateViewport()
+		return m, cmd
 
-		// Select all text
-		if key.Matches(msg, m.KeyMap.SelectAll) {
-			m.selecting = true
-			m.startRow = 0
-			m.startCol = 0
-			// Move cursor to the very end of the document
-			val := m.TextArea.Value()
-			lines := strings.Split(val, "\n")
-			lastLineIdx := len(lines) - 1
-			if lastLineIdx < 0 {
-				lastLineIdx = 0
-			}
-			lastLineLen := 0
-			if lastLineIdx < len(lines) {
-				lastLineLen = len([]rune(lines[lastLineIdx]))
-			}
-
-			// Navigate to last line
-			for getRow(m.TextArea) < lastLineIdx {
-				m.TextArea.CursorDown()
-			}
-
-			// Set cursor directly to end of line
-			m.TextArea.SetCursor(lastLineLen)
-			handled = true
-		}
-		// Copy selected text to clipboard
-		if key.Matches(msg, m.KeyMap.Copy) && m.selecting {
-			text := m.getSelectedText()
-			if text != "" {
-				clipboardWrite(text)
-			}
-			handled = true
-		}
-		// Cut selected text (copy + delete)
-		if key.Matches(msg, m.KeyMap.Cut) && m.selecting {
-			text := m.getSelectedText()
-			if text != "" {
-				clipboardWrite(text)
-			}
-			m.deleteSelection()
-			handled = true
-		}
-		// Paste from clipboard
-		if key.Matches(msg, m.KeyMap.Paste) {
-			// If there's a selection, delete it first
-			if m.selecting {
-				m.deleteSelection()
-			}
-			// Get text from clipboard and insert it
-			data := clipboardRead()
-			if len(data) > 0 {
-				m.TextArea.InsertString(data)
-			}
-			handled = true
-		}
-		// Handle delete/backspace when text is selected
-		if m.selecting && (msg.Type == tea.KeyDelete || msg.Type == tea.KeyBackspace) {
-			m.deleteSelection()
-			handled = true
-		}
-		// Handle character input when text is selected - replace selection with typed char
-		if m.selecting && msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
-			m.deleteSelection()
-			// Insert the typed character(s) - let textarea handle it
-			handled = false // Let textarea process the input
-		}
-		if key.Matches(msg, m.KeyMap.MoveSelectionDown) {
-			handled = true
-			if !m.selecting {
-				m.selecting = true
-				// Salva a posição de ancoragem
-				m.startRow = getRow(m.TextArea)
-				m.startCol = getCol(m.TextArea)
-			}
-			m.TextArea.CursorDown()
-		}
-		if key.Matches(msg, m.KeyMap.MoveSelectionUp) {
-			handled = true
-			if !m.selecting {
-				m.selecting = true
-				// Salva a posição de ancoragem
-				m.startRow = getRow(m.TextArea)
-				m.startCol = getCol(m.TextArea)
-			}
-			m.TextArea.CursorUp()
-		}
-		if key.Matches(msg, m.KeyMap.MoveSelectionLeft) {
-			handled = true
-			if !m.selecting {
-				m.selecting = true
-				// Salva a posição de ancoragem
-				m.startRow = getRow(m.TextArea)
-				m.startCol = getCol(m.TextArea)
-			}
-			// Move cursor left by setting cursor position
-			col := getCol(m.TextArea)
-			if col > 0 {
-				m.TextArea.SetCursor(col - 1)
-			} else {
-				// Move to end of previous line
-				row := getRow(m.TextArea)
-				if row > 0 {
-					m.TextArea.CursorUp()
-					m.TextArea.CursorEnd()
-				}
-			}
-		}
-		if key.Matches(msg, m.KeyMap.MoveSelectionRight) {
-			handled = true
-			if !m.selecting {
-				m.selecting = true
-				// Salva a posição de ancoragem
-				m.startRow = getRow(m.TextArea)
-				m.startCol = getCol(m.TextArea)
-			}
-			// Move cursor right
-			lines := strings.Split(m.TextArea.Value(), "\n")
-			row := getRow(m.TextArea)
-			col := getCol(m.TextArea)
-			if row < len(lines) && col < len(lines[row]) {
-				m.TextArea.SetCursor(col + 1)
-			} else if row < len(lines)-1 {
-				// Move to start of next line
-				m.TextArea.CursorDown()
-				m.TextArea.CursorStart()
-			}
-		}
-		// Cancel selection on arrow keys without shift
-		// Check if it's a plain arrow key (not with shift modifier)
-		if !m.selecting {
-			// Already not selecting, nothing to do
-		} else if msg.Type == tea.KeyLeft || msg.Type == tea.KeyRight || msg.Type == tea.KeyUp || msg.Type == tea.KeyDown {
-			// Check if shift is NOT pressed - plain arrow keys cancel selection
-			if !key.Matches(msg, m.KeyMap.MoveSelectionDown) &&
-				!key.Matches(msg, m.KeyMap.MoveSelectionUp) &&
-				!key.Matches(msg, m.KeyMap.MoveSelectionLeft) &&
-				!key.Matches(msg, m.KeyMap.MoveSelectionRight) {
-				m.selecting = false
-			}
-		}
-		// TODO add partial text selection
 	case tea.WindowSizeMsg:
-		// Update textarea size on terminal resize
 		m.Width = msg.Width
 		m.Height = msg.Height
 		m.TextArea.SetWidth(msg.Width)
@@ -572,9 +340,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var taCmd tea.Cmd
-	if !handled {
+
+	// Fallback for non-key messages
+	if _, ok := msg.(tea.KeyMsg); !ok {
+		// Only pass non-key messages (like blink)
 		m.TextArea, taCmd = m.TextArea.Update(msg)
 	}
+
+	// Adjust Viewport Y-Offset based on CursorRow
+	if m.CursorRow < m.yOffset {
+		m.yOffset = m.CursorRow
+	}
+	if m.CursorRow >= m.yOffset+m.TextArea.Height() {
+		m.yOffset = m.CursorRow - m.TextArea.Height() + 1
+	}
+
 	return m, taCmd
 }
 
@@ -584,75 +364,101 @@ func (m Model) View() string {
 	if m.Quitting {
 		return "Tchau!\n"
 	}
-	if m.selecting {
-		val := m.TextArea.Value()
-		if val == "" {
-			return m.TextArea.View()
-		}
 
-		startIdx := getAbsoluteIndex(val, m.startRow, m.startCol)
-		endIdx := getAbsoluteIndex(val, getRow(m.TextArea), getCol(m.TextArea))
+	baseView := ""
 
-		if startIdx > endIdx {
-			startIdx, endIdx = endIdx, startIdx
-		}
+	// Use Optimized Custom View for Editor
+	// val := m.TextArea.Value() // Removing redundant O(N) access
 
-		// Style for line numbers (matching textarea default style)
-		lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		// Style for the left border
-		borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		// Style for selected text
-		selectedStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color("208")).
-			Foreground(lipgloss.Color("0"))
-
-		// Calculate available width for text (accounting for line numbers and border)
-		textWidth := m.TextArea.Width()
-		lineNumWidth := 0
+	// If empty, show placeholder or empty cursor
+	// Using len(m.Lines) check instead of val == ""
+	if len(m.Lines) == 0 && !m.loading {
+		// Just render one empty line with cursor
+		s := strings.Builder{}
+		s.WriteString(borderStyle.Render("│"))
 		if m.TextArea.ShowLineNumbers {
-			lineNumWidth = 6 // " 123 " format
-			textWidth -= lineNumWidth
+			s.WriteString(lineNumStyle.Render("   1 "))
 		}
-		// Account for left border
-		textWidth -= 1
-		if textWidth < 10 {
-			textWidth = 10
+		s.WriteString(styleCursor.Render(" ")) // Cursor
+		s.WriteString("\n")
+		baseView = s.String()
+	} else {
+		// Prepare selection ranges (Row/Col based)
+		selStartRow, selStartCol := -1, -1
+		selEndRow, selEndCol := -1, -1
+
+		if m.selecting {
+			// Normalize start/end
+			sRow, sCol := m.startRow, m.startCol
+			eRow, eCol := m.CursorRow, m.CursorCol
+
+			if sRow > eRow || (sRow == eRow && sCol > eCol) {
+				sRow, sCol, eRow, eCol = eRow, eCol, sRow, sCol
+			}
+			selStartRow, selStartCol = sRow, sCol
+			selEndRow, selEndCol = eRow, eCol
 		}
 
-		// Process line by line
-		lines := strings.Split(val, "\n")
+		// Cursor tracking
+		cursorRow := m.CursorRow
+		cursorCol := m.CursorCol
+
+		// Calculate available width
+		textWidth := m.TextArea.Width()
+		if m.TextArea.ShowLineNumbers {
+			textWidth -= 6
+		}
+		textWidth -= 1 // Border
+		if textWidth < 1 {
+			textWidth = 1
+		}
+
+		lines := m.Lines // Direct access! O(1) assignment.
 		var s strings.Builder
-		runeIdx := 0
 
-		for lineNum, line := range lines {
+		endLine := m.yOffset + m.TextArea.Height()
+		if endLine > len(lines) {
+			endLine = len(lines)
+		}
+
+		startLine := m.yOffset
+		if startLine < 0 {
+			startLine = 0
+		}
+		if startLine > len(lines) {
+			startLine = len(lines)
+		}
+
+		for lineNum := startLine; lineNum < endLine; lineNum++ {
+			line := lines[lineNum]
 			lineRunes := []rune(line)
 
-			// Empty line
+			// Process line in chunks
+			chunkStart := 0
+			isFirstChunk := true
+
+			// Handle empty line case explicitly
 			if len(lineRunes) == 0 {
-				// Left border
 				s.WriteString(borderStyle.Render("│"))
 				if m.TextArea.ShowLineNumbers {
 					ln := fmt.Sprintf(" %3d ", lineNum+1)
 					s.WriteString(lineNumStyle.Render(ln))
 				}
+				// Render cursor if on this line
+				if lineNum == cursorRow && !m.selecting {
+					s.WriteString(styleCursor.Render(" "))
+				}
 				s.WriteString("\n")
-				runeIdx++
 				continue
 			}
 
-			// Process line in chunks for word wrap
-			chunkStart := 0
-			isFirstChunk := true
 			for chunkStart < len(lineRunes) {
 				chunkEnd := chunkStart + textWidth
 				if chunkEnd > len(lineRunes) {
 					chunkEnd = len(lineRunes)
 				}
 
-				// Left border
 				s.WriteString(borderStyle.Render("│"))
-
-				// Add line number
 				if m.TextArea.ShowLineNumbers {
 					if isFirstChunk {
 						ln := fmt.Sprintf(" %3d ", lineNum+1)
@@ -663,43 +469,311 @@ func (m Model) View() string {
 				}
 				isFirstChunk = false
 
-				// Process each character
 				for i := chunkStart; i < chunkEnd; i++ {
 					ch := lineRunes[i]
-					charIdx := runeIdx + i
-					if charIdx >= startIdx && charIdx < endIdx {
-						s.WriteString(selectedStyle.Render(string(ch)))
+
+					var style lipgloss.Style
+					applyStyle := false
+
+					// Selection Logic (Row/Col based)
+					if m.selecting {
+						isSelected := false
+						if lineNum > selStartRow && lineNum < selEndRow {
+							isSelected = true
+						} else if lineNum == selStartRow && lineNum == selEndRow {
+							if i >= selStartCol && i < selEndCol {
+								isSelected = true
+							}
+						} else if lineNum == selStartRow {
+							if i >= selStartCol {
+								isSelected = true
+							}
+						} else if lineNum == selEndRow {
+							if i < selEndCol {
+								isSelected = true
+							}
+						}
+
+						if isSelected {
+							style = styleSelected
+							applyStyle = true
+						}
+					}
+
+					// Cursor Logic
+					if !m.selecting && lineNum == cursorRow && i == cursorCol {
+						style = styleCursor
+						applyStyle = true
+					}
+
+					// Define "visual" char (expand tab)
+					visualChar := string(ch)
+					if ch == '\t' {
+						visualChar = "    "
+					}
+
+					if applyStyle {
+						// Manual ANSI for cursor (White BG, Black FG)
+						if !m.selecting && lineNum == cursorRow && i == cursorCol {
+							if ch == '\t' {
+								// For tabs, only highlight the first space to keep cursor width consistent (1 cell)
+								s.WriteString("\x1b[47m\x1b[30m \x1b[0m   ")
+							} else {
+								s.WriteString("\x1b[47m\x1b[30m" + visualChar + "\x1b[0m")
+							}
+						} else {
+							s.WriteString(style.Render(visualChar))
+						}
 					} else {
-						s.WriteRune(ch)
+						s.WriteString(visualChar)
 					}
 				}
+
+				// Render cursor at end of line?
+				// Use manual ANSI here too
+				if !m.selecting && lineNum == cursorRow && cursorCol == len(lineRunes) && chunkEnd == len(lineRunes) {
+					s.WriteString("\x1b[47m\x1b[30m \x1b[0m")
+				}
+
+				// Clear to end of line to remove artifacts
+				s.WriteString("\x1b[K")
 				s.WriteString("\n")
 				chunkStart = chunkEnd
 			}
-
-			runeIdx += len(lineRunes)
-			runeIdx++
 		}
-
-		return s.String()
+		baseView = s.String()
 	}
-
-	// Render the textarea (cursor is handled by textarea)
-	baseView := m.TextArea.View()
 
 	if m.saving {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
 	}
-
 	if m.loading {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.filePicker.View())
 	}
-
 	if m.statusMsg != "" {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.statusMsg)
 	}
 
 	return baseView
+}
+
+// handleKey handles key messages manually
+func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch {
+	// Quit
+	case key.Matches(msg, m.KeyMap.Quit):
+		m.Quitting = true
+		return m, tea.Quit
+
+	// Save
+	case key.Matches(msg, m.KeyMap.Save):
+		m.saving = true
+		m.textInput.Focus()
+		m.textInput.SetValue(m.FileName)
+		return m, nil
+
+	// Open
+	case key.Matches(msg, m.KeyMap.Open):
+		m.loading = true
+		m.filePicker.CurrentDirectory, _ = os.Getwd()
+		m.filePicker.Init()
+		return m, nil
+
+	// Select All
+	case key.Matches(msg, m.KeyMap.SelectAll):
+		m.startRow = 0
+		m.startCol = 0
+		m.CursorRow = len(m.Lines) - 1
+		// Check valid cursor row
+		if m.CursorRow < 0 {
+			m.CursorRow = 0
+		}
+		m.CursorCol = len([]rune(m.Lines[m.CursorRow]))
+		m.selecting = true
+		return m, nil
+
+	// Cut
+	case key.Matches(msg, m.KeyMap.Cut):
+		if m.selecting {
+			text := m.getSelectedText()
+			err := m.clipboardWrite(text)
+			if err != nil {
+				m.statusMsg = "Cut Error: " + err.Error()
+			} else {
+				m = m.deleteSelectedText()
+				m.statusMsg = "Cut to clipboard"
+			}
+		}
+		return m, nil
+
+	// Copy
+	case key.Matches(msg, m.KeyMap.Copy):
+		if m.selecting {
+			text := m.getSelectedText()
+			err := m.clipboardWrite(text)
+			if err != nil {
+				m.statusMsg = "Copy Error: " + err.Error()
+			} else {
+				m.selecting = false
+				m.statusMsg = "Copied to clipboard"
+			}
+		}
+		return m, nil
+
+	// Paste
+	case key.Matches(msg, m.KeyMap.Paste):
+		text, err := m.clipboardRead()
+		if err != nil {
+			m.statusMsg = "Paste Error: " + err.Error()
+		} else {
+			m = m.insertTextAtCursor(text)
+			m.statusMsg = "Pasted from clipboard"
+		}
+		return m, nil
+
+	// Cursor Movement & Selection
+
+	// UP
+	case key.Matches(msg, m.KeyMap.CursorUp) || key.Matches(msg, m.KeyMap.MoveSelectionUp):
+		if key.Matches(msg, m.KeyMap.MoveSelectionUp) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		if m.CursorRow > 0 {
+			m.CursorRow--
+			if m.CursorRow < len(m.Lines) {
+				lineLen := len([]rune(m.Lines[m.CursorRow]))
+				if m.CursorCol > lineLen {
+					m.CursorCol = lineLen
+				}
+			}
+		}
+
+	// DOWN
+	case key.Matches(msg, m.KeyMap.CursorDown) || key.Matches(msg, m.KeyMap.MoveSelectionDown):
+		if key.Matches(msg, m.KeyMap.MoveSelectionDown) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		if m.CursorRow < len(m.Lines)-1 {
+			m.CursorRow++
+			lineLen := len([]rune(m.Lines[m.CursorRow]))
+			if m.CursorCol > lineLen {
+				m.CursorCol = lineLen
+			}
+		}
+
+	// LEFT
+	case key.Matches(msg, m.KeyMap.CursorLeft) || key.Matches(msg, m.KeyMap.MoveSelectionLeft):
+		if key.Matches(msg, m.KeyMap.MoveSelectionLeft) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		if m.CursorCol > 0 {
+			m.CursorCol--
+		} else if m.CursorRow > 0 {
+			m.CursorRow--
+			m.CursorCol = len([]rune(m.Lines[m.CursorRow]))
+		}
+
+	// RIGHT
+	case key.Matches(msg, m.KeyMap.CursorRight) || key.Matches(msg, m.KeyMap.MoveSelectionRight):
+		if key.Matches(msg, m.KeyMap.MoveSelectionRight) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		lineLen := len([]rune(m.Lines[m.CursorRow]))
+		if m.CursorCol < lineLen {
+			m.CursorCol++
+		} else if m.CursorRow < len(m.Lines)-1 {
+			m.CursorRow++
+			m.CursorCol = 0
+		}
+
+	// Typing (Chars) and Space
+	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		if m.selecting {
+			m.selecting = false // TODO: implement delete selection
+		}
+		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
+			line := []rune(m.Lines[m.CursorRow])
+			prefix := line[:m.CursorCol]
+			suffix := line[m.CursorCol:]
+
+			var runes []rune
+			if msg.Type == tea.KeySpace {
+				runes = []rune{' '}
+			} else {
+				runes = msg.Runes
+			}
+
+			newLine := append(prefix, append(runes, suffix...)...)
+			m.Lines[m.CursorRow] = string(newLine)
+			m.CursorCol += len(runes)
+		}
+
+	// Backspace
+	case msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete || key.Matches(msg, m.KeyMap.Delete):
+		if m.selecting {
+			m.selecting = false
+		} else {
+			if m.CursorCol > 0 {
+				line := []rune(m.Lines[m.CursorRow])
+				newLine := append(line[:m.CursorCol-1], line[m.CursorCol:]...)
+				m.Lines[m.CursorRow] = string(newLine)
+				m.CursorCol--
+			} else if m.CursorRow > 0 {
+				prevLine := m.Lines[m.CursorRow-1]
+				currLine := m.Lines[m.CursorRow]
+				newCol := len([]rune(prevLine))
+				m.Lines[m.CursorRow-1] = prevLine + currLine
+				m.Lines = append(m.Lines[:m.CursorRow], m.Lines[m.CursorRow+1:]...)
+				m.CursorRow--
+				m.CursorCol = newCol
+			}
+		}
+
+	// Enter
+	case msg.Type == tea.KeyEnter:
+		if m.selecting {
+			m.selecting = false
+		}
+		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
+			line := []rune(m.Lines[m.CursorRow])
+			prefix := line[:m.CursorCol]
+			suffix := line[m.CursorCol:]
+
+			m.Lines[m.CursorRow] = string(prefix)
+			// Efficiently insert new line
+			newLines := make([]string, 0, len(m.Lines)+1)
+			newLines = append(newLines, m.Lines[:m.CursorRow+1]...)
+			newLines = append(newLines, string(suffix))
+			newLines = append(newLines, m.Lines[m.CursorRow+1:]...)
+			m.Lines = newLines
+
+			m.CursorRow++
+			m.CursorCol = 0
+		}
+	}
+	return m, cmd
 }
 
 // getAbsoluteIndex returns the absolute rune index for a given row and col.
@@ -744,4 +818,246 @@ func getAbsoluteIndex(value string, row, col int) int {
 	}
 
 	return runeIndex
+}
+
+// updateViewport adjusts the yOffset to keep the cursor in view.
+func (m Model) updateViewport() Model {
+	if m.CursorRow < m.yOffset { // check top
+		m.yOffset = m.CursorRow
+	}
+	// m.TextArea.Height() logic might be off if we don't subtract status bar?
+	// But let's stick to previous logic.
+	if m.CursorRow >= m.yOffset+m.TextArea.Height() {
+		m.yOffset = m.CursorRow - m.TextArea.Height() + 1
+	}
+	return m
+}
+
+// getSelectedText returns the text currently selected
+func (m Model) getSelectedText() string {
+	if !m.selecting {
+		return ""
+	}
+
+	startRow, startCol := m.startRow, m.startCol
+	endRow, endCol := m.CursorRow, m.CursorCol
+
+	// Normalize order
+	if startRow > endRow || (startRow == endRow && startCol > endCol) {
+		startRow, endRow = endRow, startRow
+		startCol, endCol = endCol, startCol
+	}
+
+	if startRow == endRow {
+		if startCol < 0 {
+			startCol = 0
+		}
+		line := []rune(m.Lines[startRow])
+		if endCol > len(line) {
+			endCol = len(line)
+		}
+		if startCol > len(line) {
+			startCol = len(line)
+		}
+		return string(line[startCol:endCol])
+	}
+
+	var builder strings.Builder
+	// First line
+	line := []rune(m.Lines[startRow])
+	if startCol < len(line) {
+		builder.WriteString(string(line[startCol:]))
+	}
+	builder.WriteString("\n")
+
+	// Middle lines
+	for i := startRow + 1; i < endRow; i++ {
+		builder.WriteString(m.Lines[i])
+		builder.WriteString("\n")
+	}
+
+	// Last line
+	line = []rune(m.Lines[endRow])
+	if endCol > len(line) {
+		endCol = len(line)
+	}
+	if endCol > 0 {
+		builder.WriteString(string(line[:endCol]))
+	}
+
+	return builder.String()
+}
+
+// deleteSelectedText deletes the selected text and updates the cursor (returns modified model)
+func (m Model) deleteSelectedText() Model {
+	if !m.selecting {
+		return m
+	}
+
+	startRow, startCol := m.startRow, m.startCol
+	endRow, endCol := m.CursorRow, m.CursorCol
+
+	// Normalize order
+	if startRow > endRow || (startRow == endRow && startCol > endCol) {
+		startRow, endRow = endRow, startRow
+		startCol, endCol = endCol, startCol
+	}
+
+	// Single line deletion
+	if startRow == endRow {
+		line := []rune(m.Lines[startRow])
+		// Check bounds
+		if startCol < 0 {
+			startCol = 0
+		}
+		if endCol > len(line) {
+			endCol = len(line)
+		}
+
+		newLine := append(line[:startCol], line[endCol:]...)
+		m.Lines[startRow] = string(newLine)
+		m.CursorRow = startRow
+		m.CursorCol = startCol
+		m.selecting = false
+		return m
+	}
+
+	// Multi-line deletion
+	// Start line prefix
+	startLine := []rune(m.Lines[startRow])
+	if startCol > len(startLine) {
+		startCol = len(startLine)
+	}
+	prefix := string(startLine[:startCol])
+
+	// End line suffix
+	endLine := []rune(m.Lines[endRow])
+	if endCol > len(endLine) {
+		endCol = len(endLine)
+	}
+	suffix := string(endLine[endCol:])
+
+	// Merge
+	m.Lines[startRow] = prefix + suffix
+
+	// Delete intermediate lines
+	m.Lines = append(m.Lines[:startRow+1], m.Lines[endRow+1:]...)
+
+	m.CursorRow = startRow
+	m.CursorCol = startCol
+	m.selecting = false
+	return m
+}
+
+func (m Model) insertTextAtCursor(text string) Model {
+	if text == "" {
+		return m
+	}
+
+	// Split input text by newline
+	// Note: Normalize CRLF?
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	linesToInsert := strings.Split(text, "\n")
+
+	// Current Line separation
+	row := m.CursorRow
+	col := m.CursorCol
+	if row >= len(m.Lines) {
+		row = len(m.Lines) - 1
+	} // Safety
+	if row < 0 {
+		row = 0
+		m.Lines = []string{""}
+	}
+
+	line := []rune(m.Lines[row])
+	if col > len(line) {
+		col = len(line)
+	}
+
+	prefix := string(line[:col])
+	suffix := string(line[col:])
+
+	if len(linesToInsert) == 1 {
+		// Single line insert
+		m.Lines[row] = prefix + linesToInsert[0] + suffix
+		m.CursorCol += len([]rune(linesToInsert[0]))
+	} else {
+		// Multi-line insert
+		// 1. Current row becomes Prefix + First Insert Line
+		m.Lines[row] = prefix + linesToInsert[0]
+
+		// 2. Middle lines are inserted as-is
+		// 3. Last inserted line + Suffix becomes a new line
+		var middleLines []string
+		for i := 1; i < len(linesToInsert)-1; i++ {
+			middleLines = append(middleLines, linesToInsert[i])
+		}
+
+		lastInsertLine := linesToInsert[len(linesToInsert)-1]
+		lastLineContent := lastInsertLine + suffix
+
+		// Reconstruct slice
+		newLines := make([]string, 0)
+		newLines = append(newLines, m.Lines[:row+1]...)
+		newLines = append(newLines, middleLines...)
+		newLines = append(newLines, lastLineContent)
+		newLines = append(newLines, m.Lines[row+1:]...)
+		m.Lines = newLines
+
+		m.CursorRow += len(linesToInsert) - 1
+		m.CursorCol = len([]rune(lastInsertLine))
+	}
+	return m
+}
+
+// clipboardWrite writes text to the system clipboard
+func (m Model) clipboardWrite(text string) error {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		cmd = exec.Command("pbcopy")
+	} else {
+		cmd = exec.Command("xclip", "-selection", "clipboard", "-in")
+	}
+
+	cmd.Stdin = strings.NewReader(text)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		// Try wl-copy on failure (Wayland)
+		if runtime.GOOS == "linux" {
+			wlCmd := exec.Command("wl-copy")
+			wlCmd.Stdin = strings.NewReader(text)
+			if errWl := wlCmd.Run(); errWl == nil {
+				return nil
+			}
+		}
+		return fmt.Errorf("%v: %s", err, stderr.String())
+	}
+	return nil
+}
+
+// clipboardRead reads text from the system clipboard
+func (m Model) clipboardRead() (string, error) {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		cmd = exec.Command("pbpaste")
+	} else {
+		cmd = exec.Command("xclip", "-selection", "clipboard", "-out")
+	}
+
+	out, err := cmd.Output()
+	if err != nil {
+		// Try wl-paste (Wayland)
+		if runtime.GOOS == "linux" {
+			wlCmd := exec.Command("wl-paste")
+			outWl, errWl := wlCmd.Output()
+			if errWl == nil {
+				return string(outWl), nil
+			}
+		}
+		return "", err
+	}
+	return string(out), nil
 }
