@@ -1,6 +1,3 @@
-// internal/ui/model.go
-// Package ui defines the main model for the Bubble Tea TUI application.
-// It manages the editor's state, including textarea for editing.
 package ui
 
 import (
@@ -19,8 +16,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// KeyMap defines key bindings for editor shortcuts.
-// This allows easy customization of key mappings.
 type KeyMap struct {
 	Quit               key.Binding
 	SelectAll          key.Binding
@@ -42,7 +37,6 @@ type KeyMap struct {
 	Redo               key.Binding
 }
 
-// DefaultKeyMap provides the default key bindings.
 var DefaultKeyMap = KeyMap{
 	Quit:               key.NewBinding(key.WithKeys("ctrl+q")),
 	SelectAll:          key.NewBinding(key.WithKeys("ctrl+a")),
@@ -64,7 +58,6 @@ var DefaultKeyMap = KeyMap{
 	Redo:               key.NewBinding(key.WithKeys("ctrl+shift+z")),
 }
 
-// Global Styles
 var (
 	styleCursor   = lipgloss.NewStyle().Background(lipgloss.Color("252")).Foreground(lipgloss.Color("0"))
 	styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0"))
@@ -89,31 +82,29 @@ type EditOp struct {
 	Text string
 }
 
-// Model represents the state of the text editor.
 type Model struct {
-	TextArea   textarea.Model // Text area for editing with cursor support
-	Width      int            // Terminal width
-	Height     int            // Terminal height
-	FileName   string         // Current file name (for save/load)
-	KeyMap     KeyMap         // Key bindings for shortcuts
-	Quitting   bool           // Flag to indicate if the app is quitting
-	startRow   int            // selecting starting row
-	startCol   int            // selecting starting col
+	TextArea   textarea.Model
+	Width      int
+	Height     int
+	FileName   string
+	KeyMap     KeyMap
+	Quitting   bool
+	startRow   int
+	startCol   int
 	selecting  bool
-	saving     bool             // Is the user currently saving?
-	loading    bool             // Is the user currently loading?
-	textInput  textinput.Model  // Input for filename
-	filePicker filepicker.Model // File picker for opening files
-	statusMsg  string           // Status message to display
-	yOffset    int              // Vertical scroll offset (viewport)
-	Lines      []string         // File content as lines
-	CursorRow  int              // Cursor Row
-	CursorCol  int              // Cursor Col
+	saving     bool
+	loading    bool
+	textInput  textinput.Model
+	filePicker filepicker.Model
+	statusMsg  string
+	yOffset    int
+	Lines      []string
+	CursorRow  int
+	CursorCol  int
 	UndoStack  []EditOp
 	RedoStack  []EditOp
 }
 
-// InitialModel creates and returns a new initial model.
 func InitialModel(filename string, content string) Model {
 	ta := textarea.New()
 	ta.SetWidth(80)
@@ -135,16 +126,11 @@ func InitialModel(filename string, content string) Model {
 	fp.Height = 10
 	fp.ShowHidden = true
 
-	// Define styles using lipgloss
 	styleCursor := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 	styleSelected := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
 	styleFile := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	styleDir := lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
 
-	// Apply styles (manually or via a dedicated styles struct if available in your version)
-	// For basic version, we rely on default styles or set specific callbacks if needed.
-	// Bubbles filepicker has specific fields for Styles. Let's set them if strictly required or rely on defaults.
-	// Using basic setups for now.
 	fp.Styles.Cursor = styleCursor
 	fp.Styles.Selected = styleSelected
 	fp.Styles.File = styleFile
@@ -170,22 +156,17 @@ func InitialModel(filename string, content string) Model {
 	}
 }
 
-// getCol returns the current column (character offset) within the logical line.
 func getCol(ta textarea.Model) int {
 	li := ta.LineInfo()
-	// StartColumn is the logical index where the current wrapped line starts.
-	// CharOffset is the offset within this wrapped line.
 	// Together they give the correct logical column index.
 	return li.StartColumn + li.CharOffset
 }
 
-// getRow returns the current row (line number) of the cursor using the public API.
 func getRow(ta textarea.Model) int {
 	return ta.Line()
 }
 
 // deleteSelection removes the selected text and positions cursor at start of selection.
-// Returns true if text was deleted, false if there was no selection.
 func (m *Model) deleteSelection() bool {
 	if !m.selecting {
 		return false
@@ -239,7 +220,6 @@ func (m *Model) deleteSelection() bool {
 	}
 
 	// Move cursor to beginning of document (line 0, col 0)
-	// CursorStart moves to start of current line, we need to go to line 0 first
 	for getRow(m.TextArea) > 0 {
 		m.TextArea.CursorUp()
 	}
@@ -256,7 +236,6 @@ func (m *Model) deleteSelection() bool {
 	}
 	m.TextArea.SetCursor(targetCol)
 
-	// Clear selection state
 	m.selecting = false
 	return true
 }
@@ -274,17 +253,12 @@ func Write(errorMessage string) {
 	log.Println(errorMessage)
 }
 
-// Init initializes the model. No initial commands needed.
 func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles messages and updates the model state.
-// It intercepts quit commands and delegates other input to the textarea.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
-	// Handle Loading Mode (Open)
-	// Handle Loading Mode (Open)
 	if m.loading {
 		var cmd tea.Cmd
 		m.filePicker, cmd = m.filePicker.Update(msg)
@@ -312,7 +286,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Handle Save Mode
 	if m.saving {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -379,8 +352,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, taCmd
 }
 
-// View renders the current state of the model as a string.
-// It displays the textarea with cursor.
 func (m Model) View() string {
 	if m.Quitting {
 		return "Tchau!\n"
@@ -389,10 +360,8 @@ func (m Model) View() string {
 	baseView := ""
 
 	// Use Optimized Custom View for Editor
-	// val := m.TextArea.Value() // Removing redundant O(N) access
+	// val := m.TextArea.Value()
 
-	// If empty, show placeholder or empty cursor
-	// Using len(m.Lines) check instead of val == ""
 	if len(m.Lines) == 0 && !m.loading {
 		// Just render one empty line with cursor
 		s := strings.Builder{}
@@ -434,7 +403,7 @@ func (m Model) View() string {
 			textWidth = 1
 		}
 
-		lines := m.Lines // Direct access! O(1) assignment.
+		lines := m.Lines
 		var s strings.Builder
 
 		endLine := m.yOffset + m.TextArea.Height()
@@ -454,7 +423,6 @@ func (m Model) View() string {
 			line := lines[lineNum]
 			lineRunes := []rune(line)
 
-			// Process line in chunks
 			chunkStart := 0
 			isFirstChunk := true
 
@@ -599,42 +567,33 @@ func (m Model) View() string {
 	return baseView
 }
 
-// handleKey handles key messages manually
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch {
-	// Quit
 	case key.Matches(msg, m.KeyMap.Quit):
 		m.Quitting = true
 		return m, tea.Quit
 
-	// Save
 	case key.Matches(msg, m.KeyMap.Save):
 		m.saving = true
 		m.textInput.Focus()
 		m.textInput.SetValue(m.FileName)
 		return m, nil
 
-	// Open
-	// Open
-	// Open
 	case key.Matches(msg, m.KeyMap.Open):
 		m.loading = true
 		m.filePicker.CurrentDirectory, _ = os.Getwd()
 		return m, m.filePicker.Init()
 
-	// Undo
 	case key.Matches(msg, m.KeyMap.Undo):
 		m = m.undo()
 		return m, nil
 
-	// Redo
 	case key.Matches(msg, m.KeyMap.Redo):
 		m = m.redo()
 		return m, nil
 
-	// Select All
 	case key.Matches(msg, m.KeyMap.SelectAll):
 		m.startRow = 0
 		m.startCol = 0
@@ -647,7 +606,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.selecting = true
 		return m, nil
 
-	// Cut
 	case key.Matches(msg, m.KeyMap.Cut):
 		if m.selecting {
 			text := m.getSelectedText()
@@ -662,7 +620,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
-	// Copy
 	case key.Matches(msg, m.KeyMap.Copy):
 		if m.selecting {
 			text := m.getSelectedText()
@@ -676,8 +633,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
-	// Paste
-	// Paste
 	case key.Matches(msg, m.KeyMap.Paste):
 		text, err := m.clipboardRead()
 		if err != nil {
@@ -688,8 +643,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.statusMsg = "Pasted from clipboard"
 		}
 		return m, nil
-
-	// Cursor Movement & Selection
 
 	// UP
 	case key.Matches(msg, m.KeyMap.CursorUp) || key.Matches(msg, m.KeyMap.MoveSelectionUp):
@@ -832,7 +785,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.deleteSelectedText()
 		}
 
-		tab := "    " // 4 spaces
+		tab := "    "
 		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: tab})
 		m = m.insertTextAtCursor(tab)
 		return m, nil
@@ -902,9 +855,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// getAbsoluteIndex returns the absolute rune index for a given row and col.
-// It performs bounds checking to avoid index out of range errors.
-// This function works with rune indices (character positions), not byte indices.
 func getAbsoluteIndex(value string, row, col int) int {
 	if value == "" {
 		return 0
@@ -946,7 +896,6 @@ func getAbsoluteIndex(value string, row, col int) int {
 	return runeIndex
 }
 
-// updateViewport adjusts the yOffset to keep the cursor in view.
 func (m Model) updateViewport() Model {
 	if m.CursorRow < m.yOffset { // check top
 		m.yOffset = m.CursorRow
@@ -959,7 +908,6 @@ func (m Model) updateViewport() Model {
 	return m
 }
 
-// getSelectedText returns the text currently selected
 func (m Model) getSelectedText() string {
 	if !m.selecting {
 		return ""
@@ -1014,7 +962,6 @@ func (m Model) getSelectedText() string {
 	return builder.String()
 }
 
-// deleteSelectedText deletes the selected text and updates the cursor (returns modified model)
 func (m Model) deleteSelectedText() Model {
 	if !m.selecting {
 		return m
@@ -1138,7 +1085,6 @@ func (m Model) insertTextAtCursor(text string) Model {
 	return m
 }
 
-// clipboardWrite writes text to the system clipboard
 func (m Model) clipboardWrite(text string) error {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "darwin" {
@@ -1164,7 +1110,6 @@ func (m Model) clipboardWrite(text string) error {
 	return nil
 }
 
-// clipboardRead reads text from the system clipboard
 func (m Model) clipboardRead() (string, error) {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "darwin" {
@@ -1188,13 +1133,11 @@ func (m Model) clipboardRead() (string, error) {
 	return string(out), nil
 }
 
-// pushUndo records an operation to the undo stack and clears the redo stack
 func (m *Model) pushUndo(op EditOp) {
 	m.UndoStack = append(m.UndoStack, op)
 	m.RedoStack = nil // Clear redo stack on new operation
 }
 
-// undo reverts the last operation
 func (m Model) undo() Model {
 	if len(m.UndoStack) == 0 {
 		m.statusMsg = "Nothing to undo"
@@ -1250,7 +1193,6 @@ func (m Model) undo() Model {
 	return m
 }
 
-// redo re-applies the last undone operation
 func (m Model) redo() Model {
 	if len(m.RedoStack) == 0 {
 		m.statusMsg = "Nothing to redo"

@@ -23,9 +23,7 @@ func init() {
 	}
 }
 
-// GetLineStyles returns a slice of lipgloss.Style for each character in the line
 func GetLineStyles(line string, filename string) []lipgloss.Style {
-	// 1. Get Lexer
 	lexerInterface, ok := lexerCache.Load(filename)
 	var lexer chroma.Lexer
 	if !ok {
@@ -41,15 +39,11 @@ func GetLineStyles(line string, filename string) []lipgloss.Style {
 		lexer = lexerInterface.(chroma.Lexer)
 	}
 
-	// 2. Tokenize line
 	iterator, err := lexer.Tokenise(nil, line)
 	if err != nil {
 		return make([]lipgloss.Style, len([]rune(line)))
 	}
 
-	// 3. Build styles slice
-	// Note: line runes count might differ from byte count. Chroma works on strings (bytes/runes mixed).
-	// We need to map tokens to runes.
 	runes := []rune(line)
 	result := make([]lipgloss.Style, len(runes))
 
