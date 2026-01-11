@@ -60,6 +60,7 @@ Larry offers a perfect balance for users who need more power than Nano without t
 | **Cut** | `Ctrl+X` |
 | **Paste** | `Ctrl+V` |
 | **Go to Line** | `Ctrl+G` |
+| **Toggle Help** | `Ctrl+H` |
 | **Select All** | `Ctrl+A` |
 | **Select Text**| `Shift + Arrays` |
 | **Indent** | `TAB` |
