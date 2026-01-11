@@ -40,6 +40,10 @@ A minimalist, high-performance TUI text editor written in Go.
    ```bash
    ./larry [filename]
    ```
+6. Add Larry to your PATH if you want:
+   ```bash
+   export PATH="<path_to_larry_bin/:$PATH"
+   ``` 
 
 ## Key Bindings
 
