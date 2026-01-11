@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -29,6 +30,7 @@ type KeyMap struct {
 	Copy               key.Binding
 	Paste              key.Binding
 	Cut                key.Binding
+	Save               key.Binding
 }
 
 // DefaultKeyMap provides the default key bindings.
@@ -42,6 +44,7 @@ var DefaultKeyMap = KeyMap{
 	Copy:               key.NewBinding(key.WithKeys("ctrl+c")),
 	Paste:              key.NewBinding(key.WithKeys("ctrl+v")),
 	Cut:                key.NewBinding(key.WithKeys("ctrl+x")),
+	Save:               key.NewBinding(key.WithKeys("ctrl+s")),
 }
 
 // Model represents the state of the text editor.
@@ -55,6 +58,9 @@ type Model struct {
 	startRow  int            // selecting starting row
 	startCol  int            // selecting starting col
 	selecting bool
+	saving    bool            // Is the user currently saving?
+	textInput textinput.Model // Input for filename
+	statusMsg string          // Status message to display
 }
 
 // InitialModel creates and returns a new initial model.
@@ -66,6 +72,12 @@ func InitialModel() Model {
 	ta.Focus()
 	//styles.setupStyle()
 
+	ti := textinput.New()
+	ti.Placeholder = "filename.txt"
+	ti.Prompt = "Filename: "
+	ti.CharLimit = 156
+	ti.Width = 20
+
 	return Model{
 		TextArea:  ta,
 		Width:     80,
@@ -76,6 +88,8 @@ func InitialModel() Model {
 		startRow:  0,
 		startCol:  0,
 		selecting: false,
+		textInput: ti,
+		saving:    false,
 	}
 }
 
@@ -287,6 +301,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Quitting = true
 			return m, tea.Quit
 		}
+
+		// Handle Save Mode
+		if m.saving {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.saving = false
+				m.TextArea.Focus()
+				return m, nil
+			case tea.KeyEnter:
+				filename := m.textInput.Value()
+				if filename == "" {
+					filename = "untitled.txt"
+				}
+				// Save file
+				err := os.WriteFile(filename, []byte(m.TextArea.Value()), 0644)
+				if err != nil {
+					m.statusMsg = "Error saving: " + err.Error()
+				} else {
+					m.statusMsg = "Saved: " + filename
+					m.FileName = filename
+				}
+				m.saving = false
+				m.TextArea.Focus()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.textInput, cmd = m.textInput.Update(msg)
+			return m, cmd
+		}
+
+		if key.Matches(msg, m.KeyMap.Save) {
+			m.saving = true
+			m.textInput.SetValue(m.FileName)
+			m.textInput.Focus()
+			return m, nil
+		}
+
 		// Select all text
 		if key.Matches(msg, m.KeyMap.SelectAll) {
 			m.selecting = true
@@ -549,8 +600,19 @@ func (m Model) View() string {
 
 		return s.String()
 	}
+
 	// Render the textarea (cursor is handled by textarea)
-	return m.TextArea.View()
+	baseView := m.TextArea.View()
+
+	if m.saving {
+		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
+	}
+
+	if m.statusMsg != "" {
+		return fmt.Sprintf("%s\n\n%s", baseView, m.statusMsg)
+	}
+
+	return baseView
 }
 
 // getAbsoluteIndex returns the absolute rune index for a given row and col.
