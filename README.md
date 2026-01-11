@@ -75,3 +75,4 @@ A minimalist, high-performance TUI text editor written in Go.
 - [ ] Theme support
 - [ ] Add Help Menu and Docs
 - [ ] Add to a remote package manager
+- [ ] Improve resizing and responsiveness (add scaling etc)
