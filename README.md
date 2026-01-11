@@ -1,54 +1,63 @@
-# Larry Text Editor
+# Larry - The Text Editor
 
-A minimalist general purpose terminal-based text editor written in Go.
+A minimalist, high-performance TUI text editor written in Go.
 
-## Features (MVP)
+## Features
 
-- Visual cursor that follows text input and navigation
-- Character insertion and backspace deletion
-- Enter for new lines
-- Automatic scrolling
-- Simple status line showing file name and cursor position
-- Quit with Ctrl+C
-- Modular keymap for easy shortcut customization
-- Selecting text with shift + arrow keys
+- **OptimizedFile Loader**: Custom rendering engine optimizing performance for large files (O(1) input, O(H) rendering).
+- **Core Functionality**:
+    - Undo/Redo (`Ctrl+Z`, `Ctrl+Shift+Z`)
+    - Clipboard Support (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`)
+    - Selection with Shift+Arrows
+    - File Loading/Saving using modern file picker
+- **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
+- **UI**: 
+    - Clean, distraction-free interface
+    - Absolute line numbers
+    - Visual cursor and selection highlighting
+    - Status reporting (without clutter)
 
-## Building and Running
+## Installation
 
-1. Ensure Go is installed (1.18+ recommended).
-2. Clone or navigate to the project directory.
-3. Install dependencies: `go mod tidy`
-4. Build: `go build ./cmd/larry-text-editor`
-5. Run: `./larry-text-editor`
-
-## Usage
-
-- Type characters to insert text.
-- Use arrow keys to move the cursor.
-- Backspace to delete characters.
-- Enter to create new lines.
-- Ctrl+C or 'q' to quit.
+1. Ensure Go 1.18+ is installed.
+2. Clone the repository.
+3. Install dependencies:
+   ```bash
+   go mod tidy
+   ```
+4. Build:
+   ```bash
+   go build ./cmd/larry-text-editor
+   ```
+5. Run:
+   ```bash
+   ./larry-text-editor [filename]
+   ```
 
 ## Key Bindings
 
-Key bindings are defined in `internal/ui/model.go` and can be easily customized:
+| Action | Shortcut |
+|--------|----------|
+| **Quit** | `Ctrl+Q` |
+| **Save** | `Ctrl+S` |
+| **Open File** | `Ctrl+O` |
+| **Undo** | `Ctrl+Z` |
+| **Redo** | `Ctrl+Shift+Z` |
+| **Copy** | `Ctrl+C` |
+| **Cut** | `Ctrl+X` |
+| **Paste** | `Ctrl+V` |
+| **Select All** | `Ctrl+A` |
+| **Select Text**| `Shift + Arrays` |
+| **Navigation** | Arrow Keys |
 
-- Up/Down/Left/Right: Arrow keys
-- Backspace: Delete character
-- Enter: New line
-- Ctrl+C or 'q': Quit
-
-To modify shortcuts, edit the `DefaultKeyMap` struct and update the keys as needed.
-
-## Future Enhancements
+## Roadmap
 
 - [x] Line numbers
 - [x] Selecting text
 - [x] File picker
-- [x] Optimized file loading
-- [] Layout and UI improvements
+- [x] Optimized file loading (Engine 2.0)
 - [x] File loading and saving
-- [x] Word wrapping
-- [] Syntax highlighting
+- [x] Syntax highlighting
 - [x] Undo/redo functionality
-- [] Markdown instant visualization
+- [ ] Search / Find & Replace
+- [ ] Markdown instant visualization
