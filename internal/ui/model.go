@@ -490,11 +490,20 @@ func (m Model) View() string {
 				}
 				isFirstChunk = false
 
+				// Syntax Highlighting
+				syntaxStyles := GetLineStyles(m.Lines[lineNum], m.FileName)
+
 				for i := chunkStart; i < chunkEnd; i++ {
 					ch := lineRunes[i]
 
 					var style lipgloss.Style
 					applyStyle := false
+
+					// Apply Syntax Style (Base)
+					if i < len(syntaxStyles) {
+						style = syntaxStyles[i]
+						applyStyle = true
+					}
 
 					// Selection Logic (Row/Col based)
 					if m.selecting {

@@ -50,5 +50,5 @@ To modify shortcuts, edit the `DefaultKeyMap` struct and update the keys as need
 - [x] File loading and saving
 - [x] Word wrapping
 - [] Syntax highlighting
-- [] Undo/redo functionality
+- [x] Undo/redo functionality
 - [] Markdown instant visualization
