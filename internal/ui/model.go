@@ -422,77 +422,46 @@ func (m Model) View() string {
 		lines := m.Lines
 		var s strings.Builder
 
-		// We need to limit the number of visual lines (chunks) to m.TextArea.Height()
 		maxVisualLines := m.TextArea.Height()
 		visualLinesRendered := 0
+		currentVisualLineIndex := 0
 
-		startLine := m.yOffset
-		if startLine < 0 {
-			startLine = 0
-		}
-		if startLine > len(lines) {
-			startLine = len(lines)
-		}
-
-		for lineNum := startLine; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
+		for lineNum := 0; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 			line := lines[lineNum]
 			lineRunes := []rune(line)
 
-			chunkStart := 0
-			isFirstChunk := true
-
-			// Handle empty line case explicitly
-			if len(lineRunes) == 0 {
-				s.WriteString(borderStyle.Render("│"))
-				if m.TextArea.ShowLineNumbers {
-					ln := fmt.Sprintf(" %3d ", lineNum+1)
-					s.WriteString(lineNumStyle.Render(ln))
+			// Helper to render a chunk
+			renderChunk := func(runes []rune, startIdx, endIdx int, isFirst bool, currentLineVisualWidth int) {
+				if visualLinesRendered >= maxVisualLines {
+					return
 				}
-				// Render cursor if on this line
-				if lineNum == cursorRow && !m.selecting {
-					s.WriteString(styleCursor.Render(" "))
-				}
-
-				visualLinesRendered++
-				if visualLinesRendered < maxVisualLines {
-					s.WriteString("\n")
-				}
-				continue
-			}
-
-			for chunkStart < len(lineRunes) && visualLinesRendered < maxVisualLines {
-				chunkEnd := chunkStart + textWidth
-				if chunkEnd > len(lineRunes) {
-					chunkEnd = len(lineRunes)
+				if currentVisualLineIndex < m.yOffset {
+					currentVisualLineIndex++
+					return
 				}
 
 				s.WriteString(borderStyle.Render("│"))
 				if m.TextArea.ShowLineNumbers {
-					if isFirstChunk {
+					if isFirst {
 						ln := fmt.Sprintf(" %3d ", lineNum+1)
 						s.WriteString(lineNumStyle.Render(ln))
 					} else {
 						s.WriteString(lineNumStyle.Render("      "))
 					}
 				}
-				isFirstChunk = false
 
-				// Syntax Highlighting
 				syntaxStyles := GetLineStyles(m.Lines[lineNum], m.FileName)
 
-				for i := chunkStart; i < chunkEnd; i++ {
-					ch := lineRunes[i]
-
+				for i := startIdx; i < endIdx; i++ {
+					ch := runes[i]
 					var style lipgloss.Style
 					applyStyle := false
 
-					// Apply Syntax Style (Base)
 					if i < len(syntaxStyles) {
 						style = syntaxStyles[i]
 						applyStyle = true
 					}
 
-					// Selection Logic (Row/Col based)
 					if m.selecting {
 						isSelected := false
 						if lineNum > selStartRow && lineNum < selEndRow {
@@ -510,30 +479,25 @@ func (m Model) View() string {
 								isSelected = true
 							}
 						}
-
 						if isSelected {
 							style = styleSelected
 							applyStyle = true
 						}
 					}
 
-					// Cursor Logic
 					if !m.selecting && lineNum == cursorRow && i == cursorCol {
 						style = styleCursor
 						applyStyle = true
 					}
 
-					// Define "visual" char (expand tab)
 					visualChar := string(ch)
 					if ch == '\t' {
 						visualChar = "    "
 					}
 
 					if applyStyle {
-						// Manual ANSI for cursor (White BG, Black FG)
 						if !m.selecting && lineNum == cursorRow && i == cursorCol {
 							if ch == '\t' {
-								// For tabs, only highlight the first space to keep cursor width consistent (1 cell)
 								s.WriteString("\x1b[47m\x1b[30m \x1b[0m   ")
 							} else {
 								s.WriteString("\x1b[47m\x1b[30m" + visualChar + "\x1b[0m")
@@ -546,20 +510,43 @@ func (m Model) View() string {
 					}
 				}
 
-				// Render cursor at end of line?
-				// Use manual ANSI here too
-				if !m.selecting && lineNum == cursorRow && cursorCol == len(lineRunes) && chunkEnd == len(lineRunes) {
+				if !m.selecting && lineNum == cursorRow && cursorCol == len(runes) && endIdx == len(runes) {
 					s.WriteString("\x1b[47m\x1b[30m \x1b[0m")
 				}
 
-				// Clear to end of line to remove artifacts
 				s.WriteString("\x1b[K")
-
 				visualLinesRendered++
 				if visualLinesRendered < maxVisualLines {
 					s.WriteString("\n")
 				}
-				chunkStart = chunkEnd
+				currentVisualLineIndex++
+			}
+
+			if len(lineRunes) == 0 {
+				renderChunk(nil, 0, 0, true, 0)
+				continue
+			}
+
+			chunkStart := 0
+			currentVisualWidth := 0
+			isFirst := true
+			for i := 0; i < len(lineRunes); i++ {
+				charWidth := 1
+				if lineRunes[i] == '\t' {
+					charWidth = 4
+				}
+
+				if currentVisualWidth+charWidth > textWidth {
+					renderChunk(lineRunes, chunkStart, i, isFirst, currentVisualWidth)
+					chunkStart = i
+					currentVisualWidth = charWidth
+					isFirst = false
+				} else {
+					currentVisualWidth += charWidth
+				}
+			}
+			if chunkStart <= len(lineRunes) {
+				renderChunk(lineRunes, chunkStart, len(lineRunes), isFirst, currentVisualWidth)
 			}
 		}
 		baseView = s.String()
@@ -919,14 +906,75 @@ func getAbsoluteIndex(value string, row, col int) int {
 	return runeIndex
 }
 
-func (m Model) updateViewport() Model {
-	if m.CursorRow < m.yOffset { // check top
-		m.yOffset = m.CursorRow
+func (m Model) getVisualLineCount(lineNum int, textWidth int) int {
+	if lineNum < 0 || lineNum >= len(m.Lines) {
+		return 0
 	}
-	// m.TextArea.Height() logic might be off if we don't subtract status bar?
-	// But let's stick to previous logic.
-	if m.CursorRow >= m.yOffset+m.TextArea.Height() {
-		m.yOffset = m.CursorRow - m.TextArea.Height() + 1
+	line := m.Lines[lineNum]
+	if line == "" {
+		return 1
+	}
+
+	visualWidth := 0
+	count := 1
+	for _, r := range line {
+		charWidth := 1
+		if r == '\t' {
+			charWidth = 4
+		}
+		if visualWidth+charWidth > textWidth {
+			count++
+			visualWidth = charWidth
+		} else {
+			visualWidth += charWidth
+		}
+	}
+	return count
+}
+
+func (m Model) getCursorVisualOffset(textWidth int) int {
+	totalVisualLines := 0
+	for i := 0; i < m.CursorRow; i++ {
+		totalVisualLines += m.getVisualLineCount(i, textWidth)
+	}
+
+	// Visual offset within the current line
+	line := []rune(m.Lines[m.CursorRow])
+	currentLineVisualLine := 0
+	visualWidth := 0
+	for i := 0; i < m.CursorCol && i < len(line); i++ {
+		charWidth := 1
+		if line[i] == '\t' {
+			charWidth = 4
+		}
+		if visualWidth+charWidth > textWidth {
+			currentLineVisualLine++
+			visualWidth = charWidth
+		} else {
+			visualWidth += charWidth
+		}
+	}
+
+	return totalVisualLines + currentLineVisualLine
+}
+
+func (m Model) updateViewport() Model {
+	textWidth := m.TextArea.Width()
+	if m.TextArea.ShowLineNumbers {
+		textWidth -= 6
+	}
+	textWidth -= 1 // Border
+	if textWidth < 1 {
+		textWidth = 1
+	}
+
+	cursorVisualLine := m.getCursorVisualOffset(textWidth)
+
+	if cursorVisualLine < m.yOffset {
+		m.yOffset = cursorVisualLine
+	}
+	if cursorVisualLine >= m.yOffset+m.TextArea.Height() {
+		m.yOffset = cursorVisualLine - m.TextArea.Height() + 1
 	}
 	return m
 }
