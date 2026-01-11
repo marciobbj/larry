@@ -31,6 +31,7 @@ type KeyMap struct {
 	Paste              key.Binding
 	Cut                key.Binding
 	Save               key.Binding
+	Open               key.Binding
 }
 
 // DefaultKeyMap provides the default key bindings.
@@ -45,6 +46,7 @@ var DefaultKeyMap = KeyMap{
 	Paste:              key.NewBinding(key.WithKeys("ctrl+v")),
 	Cut:                key.NewBinding(key.WithKeys("ctrl+x")),
 	Save:               key.NewBinding(key.WithKeys("ctrl+s")),
+	Open:               key.NewBinding(key.WithKeys("ctrl+o")),
 }
 
 // Model represents the state of the text editor.
@@ -59,16 +61,18 @@ type Model struct {
 	startCol  int            // selecting starting col
 	selecting bool
 	saving    bool            // Is the user currently saving?
+	loading   bool            // Is the user currently loading?
 	textInput textinput.Model // Input for filename
 	statusMsg string          // Status message to display
 }
 
 // InitialModel creates and returns a new initial model.
-func InitialModel() Model {
+func InitialModel(filename string, content string) Model {
 	ta := textarea.New()
 	ta.SetWidth(80)
 	ta.SetHeight(20)
 	ta.Placeholder = "Digite algo..."
+	ta.SetValue(content)
 	ta.Focus()
 	//styles.setupStyle()
 
@@ -78,11 +82,15 @@ func InitialModel() Model {
 	ti.CharLimit = 156
 	ti.Width = 20
 
+	if filename == "" {
+		filename = "untitled.txt"
+	}
+
 	return Model{
 		TextArea:  ta,
 		Width:     80,
 		Height:    20,
-		FileName:  "untitled.txt",
+		FileName:  filename,
 		KeyMap:    DefaultKeyMap,
 		Quitting:  false,
 		startRow:  0,
@@ -90,6 +98,7 @@ func InitialModel() Model {
 		selecting: false,
 		textInput: ti,
 		saving:    false,
+		loading:   false,
 	}
 }
 
@@ -331,9 +340,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// Handle Loading Mode (Open)
+		if m.loading {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.loading = false
+				m.TextArea.Focus()
+				return m, nil
+			case tea.KeyEnter:
+				filename := m.textInput.Value()
+				// Read file
+				content, err := os.ReadFile(filename)
+				if err != nil {
+					m.statusMsg = "Error opening: " + err.Error()
+				} else {
+					m.TextArea.SetValue(string(content))
+					m.statusMsg = "Opened: " + filename
+					m.FileName = filename
+					// Move cursor to start of document (0,0)
+					m.TextArea.CursorStart()
+					for getRow(m.TextArea) > 0 {
+						m.TextArea.CursorUp()
+					}
+				}
+				m.loading = false
+				m.TextArea.Focus()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.textInput, cmd = m.textInput.Update(msg)
+			return m, cmd
+		}
+
 		if key.Matches(msg, m.KeyMap.Save) {
 			m.saving = true
+			m.textInput.Prompt = "Filename: "
 			m.textInput.SetValue(m.FileName)
+			m.textInput.Focus()
+			return m, nil
+		}
+
+		if key.Matches(msg, m.KeyMap.Open) {
+			m.loading = true
+			m.textInput.Prompt = "Open: "
+			m.textInput.SetValue("")
 			m.textInput.Focus()
 			return m, nil
 		}

@@ -21,8 +21,20 @@ func main() {
 		// Continue anyway - clipboard features may not work
 	}
 
+	// Handle CLI arguments
+	filename := ""
+	content := ""
+	if len(os.Args) > 1 {
+		filename = os.Args[1]
+		data, err := os.ReadFile(filename)
+		if err == nil {
+			content = string(data)
+		}
+		// If read fails (e.g. new file), we start with empty content and the filename
+	}
+
 	// Initialize the model
-	m := ui.InitialModel()
+	m := ui.InitialModel(filename, content)
 
 	// Create and run the Bubble Tea program
 	p := tea.NewProgram(m, tea.WithAltScreen()) // Use alternate screen for clean TUI
