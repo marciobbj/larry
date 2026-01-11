@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // KeyMap defines key bindings for editor shortcuts.
@@ -463,16 +464,29 @@ func (m Model) View() string {
 			startIdx, endIdx = endIdx, startIdx
 		}
 
-		// Calculate available width for text (accounting for line numbers)
+		// Style for line numbers (matching textarea default style)
+		lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		// Style for the left border
+		borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		// Style for selected text
+		selectedStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("208")).
+			Foreground(lipgloss.Color("0"))
+
+		// Calculate available width for text (accounting for line numbers and border)
 		textWidth := m.TextArea.Width()
+		lineNumWidth := 0
 		if m.TextArea.ShowLineNumbers {
-			textWidth -= 6 // " 123 " = 6 characters for line numbers
+			lineNumWidth = 6 // " 123 " format
+			textWidth -= lineNumWidth
 		}
+		// Account for left border
+		textWidth -= 1
 		if textWidth < 10 {
 			textWidth = 10
 		}
 
-		// Process line by line to properly handle line numbers
+		// Process line by line
 		lines := strings.Split(val, "\n")
 		var s strings.Builder
 		runeIdx := 0
@@ -480,19 +494,20 @@ func (m Model) View() string {
 		for lineNum, line := range lines {
 			lineRunes := []rune(line)
 
-			// Handle word wrap - break long lines into multiple visual lines
+			// Empty line
 			if len(lineRunes) == 0 {
-				// Empty line
+				// Left border
+				s.WriteString(borderStyle.Render("│"))
 				if m.TextArea.ShowLineNumbers {
 					ln := fmt.Sprintf(" %3d ", lineNum+1)
-					s.WriteString(ln)
+					s.WriteString(lineNumStyle.Render(ln))
 				}
 				s.WriteString("\n")
-				runeIdx++ // Count the \n character
+				runeIdx++
 				continue
 			}
 
-			// Process the line in chunks of textWidth
+			// Process line in chunks for word wrap
 			chunkStart := 0
 			isFirstChunk := true
 			for chunkStart < len(lineRunes) {
@@ -501,26 +516,26 @@ func (m Model) View() string {
 					chunkEnd = len(lineRunes)
 				}
 
-				// Add line number only for the first chunk of each logical line
+				// Left border
+				s.WriteString(borderStyle.Render("│"))
+
+				// Add line number
 				if m.TextArea.ShowLineNumbers {
 					if isFirstChunk {
 						ln := fmt.Sprintf(" %3d ", lineNum+1)
-						s.WriteString(ln)
+						s.WriteString(lineNumStyle.Render(ln))
 					} else {
-						s.WriteString("      ") // Padding for wrapped lines
+						s.WriteString(lineNumStyle.Render("      "))
 					}
 				}
 				isFirstChunk = false
 
-				// Process each character in the chunk
+				// Process each character
 				for i := chunkStart; i < chunkEnd; i++ {
 					ch := lineRunes[i]
 					charIdx := runeIdx + i
 					if charIdx >= startIdx && charIdx < endIdx {
-						// Use orange background (color 208) and black text (color 0)
-						s.WriteString("\x1b[48;5;208;38;5;0m")
-						s.WriteRune(ch)
-						s.WriteString("\x1b[0m")
+						s.WriteString(selectedStyle.Render(string(ch)))
 					} else {
 						s.WriteRune(ch)
 					}
@@ -530,7 +545,7 @@ func (m Model) View() string {
 			}
 
 			runeIdx += len(lineRunes)
-			runeIdx++ // Count the \n character
+			runeIdx++
 		}
 
 		return s.String()
