@@ -48,7 +48,7 @@ A minimalist, high-performance TUI text editor written in Go.
 | **Save** | `Ctrl+S` |
 | **Open File** | `Ctrl+O` |
 | **Undo** | `Ctrl+Z` |
-| **Redo** | `Ctrl+Shift+Z` |
+| **Redo** (disabled)| `Ctrl+Shift+Z` |
 | **Copy** | `Ctrl+C` |
 | **Cut** | `Ctrl+X` |
 | **Paste** | `Ctrl+V` |
