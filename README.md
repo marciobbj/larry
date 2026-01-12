@@ -16,11 +16,12 @@ A minimalist, high-performance TUI text editor written in Go.
     - Clipboard Support (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`)
     - Selection with Shift+Arrows
     - File Loading/Saving using modern file picker
+- **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
 - **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
-- **UI**: 
+- **UI**:
     - Clean, distraction-free interface
     - Absolute line numbers
-    - Visual cursor and selection highlighting
+    - Visual cursor, selection, and search result highlighting
     - Status reporting (without clutter)
 
 ## Why should I use Larry?
@@ -54,6 +55,7 @@ Larry offers a perfect balance for users who need more power than Nano without t
 | **Quit** | `Ctrl+Q` |
 | **Save** | `Ctrl+S` |
 | **Open File** | `Ctrl+O` |
+| **Search** | `Ctrl+F` |
 | **Undo** | `Ctrl+Z` |
 | **Redo** (disabled)| `Ctrl+Shift+Z` |
 | **Copy** | `Ctrl+C` |
@@ -66,6 +68,17 @@ Larry offers a perfect balance for users who need more power than Nano without t
 | **Indent** | `TAB` |
 | **Dedent** | `Shift+Tab` |
 | **Navigation** | Arrow Keys |
+
+## Search & Find
+
+Larry includes an efficient text search feature powered by the **Boyer-Moore algorithm**, providing fast and responsive search capabilities across your files. This makes Larry's search extremely fast, even for large files with complex search patterns.
+
+### Search Features
+
+- **Case-Sensitive**: Searches exactly as typed
+- **Multi-Line Support**: Finds matches across all lines in the file
+- **Navigation**: Jump directly to any search result
+- **Persistent**: Search state remains active until you exit search mode
 
 ## Configuration
 
@@ -100,7 +113,8 @@ Run Larry with the `-config` flag:
 - [x] File loading and saving
 - [x] Syntax highlighting
 - [x] Undo/redo functionality
-- [ ] Search / Find & Replace
+- [x] Search 
+- [] Replace
 - [x] Go to line
 - [ ] Markdown instant visualization
 - [ ] LSP support
