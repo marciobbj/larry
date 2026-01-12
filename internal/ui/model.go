@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"larry/internal/config"
+	"larry/internal/search"
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
@@ -39,6 +40,7 @@ type KeyMap struct {
 	Redo               key.Binding
 	GoToLine           key.Binding
 	ToggleHelp         key.Binding
+	Search             key.Binding
 }
 
 var DefaultKeyMap = KeyMap{
@@ -62,11 +64,13 @@ var DefaultKeyMap = KeyMap{
 	Redo:               key.NewBinding(key.WithKeys("ctrl+shift+z")),
 	GoToLine:           key.NewBinding(key.WithKeys("ctrl+g")),
 	ToggleHelp:         key.NewBinding(key.WithKeys("ctrl+h")),
+	Search:             key.NewBinding(key.WithKeys("ctrl+f")),
 }
 
 var (
 	styleCursor   = lipgloss.NewStyle().Background(lipgloss.Color("252")).Foreground(lipgloss.Color("0"))
 	styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0"))
+	styleSearch   = lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0")) // Yellow background for search
 	styleFile     = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	styleDir      = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
 	lineNumStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -90,29 +94,33 @@ type EditOp struct {
 }
 
 type Model struct {
-	TextArea   textarea.Model
-	Width      int
-	Height     int
-	FileName   string
-	KeyMap     KeyMap
-	Quitting   bool
-	startRow   int
-	startCol   int
-	selecting  bool
-	saving     bool
-	loading    bool
-	goToLine   bool
-	textInput  textinput.Model
-	filePicker filepicker.Model
-	statusMsg  string
-	yOffset    int
-	Lines      []string
-	CursorRow  int
-	CursorCol  int
-	UndoStack  []EditOp
-	RedoStack  []EditOp
-	Config     config.Config
-	showHelp   bool
+	TextArea           textarea.Model
+	Width              int
+	Height             int
+	FileName           string
+	KeyMap             KeyMap
+	Quitting           bool
+	startRow           int
+	startCol           int
+	selecting          bool
+	saving             bool
+	loading            bool
+	goToLine           bool
+	searching          bool
+	textInput          textinput.Model
+	filePicker         filepicker.Model
+	statusMsg          string
+	yOffset            int
+	Lines              []string
+	CursorRow          int
+	CursorCol          int
+	UndoStack          []EditOp
+	RedoStack          []EditOp
+	Config             config.Config
+	showHelp           bool
+	searchQuery        string
+	searchResults      []search.SearchMatch
+	currentResultIndex int
 }
 
 func InitialModel(filename string, content string, cfg config.Config) Model {
@@ -143,24 +151,28 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	SetTheme(cfg.Theme)
 
 	return Model{
-		TextArea:   ta,
-		Width:      80,
-		Height:     20,
-		FileName:   filename,
-		KeyMap:     DefaultKeyMap,
-		Quitting:   false,
-		startRow:   0,
-		startCol:   0,
-		selecting:  false,
-		textInput:  ti,
-		saving:     false,
-		loading:    false,
-		filePicker: fp,
-		Lines:      strings.Split(content, "\n"),
-		CursorRow:  0,
-		CursorCol:  0,
-		Config:     cfg,
-		showHelp:   false,
+		TextArea:           ta,
+		Width:              80,
+		Height:             20,
+		FileName:           filename,
+		KeyMap:             DefaultKeyMap,
+		Quitting:           false,
+		startRow:           0,
+		startCol:           0,
+		selecting:          false,
+		textInput:          ti,
+		saving:             false,
+		loading:            false,
+		filePicker:         fp,
+		Lines:              strings.Split(content, "\n"),
+		CursorRow:          0,
+		CursorCol:          0,
+		Config:             cfg,
+		showHelp:           false,
+		searching:          false,
+		searchQuery:        "",
+		searchResults:      nil,
+		currentResultIndex: -1,
 	}
 }
 
@@ -359,6 +371,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.searching {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.searching = false
+				m.searchQuery = ""
+				m.searchResults = nil
+				m.currentResultIndex = -1
+				return m, nil
+			case tea.KeyEnter:
+				query := m.textInput.Value()
+				if query != "" && query != m.searchQuery {
+					// New search
+					m.searchQuery = query
+					searcher := search.NewBoyerMooreSearch(query)
+					m.searchResults = searcher.SearchInLines(m.Lines)
+					m.currentResultIndex = -1
+				}
+				// Navigate to next result or first result
+				if len(m.searchResults) > 0 {
+					m.currentResultIndex = (m.currentResultIndex + 1) % len(m.searchResults)
+					result := m.searchResults[m.currentResultIndex]
+					m.CursorRow = result.Line
+					m.CursorCol = result.Col
+					m = m.updateViewport()
+				}
+				return m, nil
+			}
+		}
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+
 	if m.showHelp {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if keyMsg.Type == tea.KeyEsc || key.Matches(keyMsg, m.KeyMap.ToggleHelp) {
@@ -509,11 +556,24 @@ func (m Model) View() string {
 					var style lipgloss.Style
 					applyStyle := false
 
+					// Base syntax highlighting
 					if i < len(syntaxStyles) {
 						style = syntaxStyles[i]
 						applyStyle = true
 					}
 
+					// Search highlighting (can override syntax)
+					if len(m.searchResults) > 0 {
+						for _, result := range m.searchResults {
+							if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
+								style = styleSearch
+								applyStyle = true
+								break
+							}
+						}
+					}
+
+					// Selection highlighting (can override search and syntax)
 					if m.selecting {
 						isSelected := false
 						if lineNum > selStartRow && lineNum < selEndRow {
@@ -537,7 +597,8 @@ func (m Model) View() string {
 						}
 					}
 
-					if !m.selecting && lineNum == cursorRow && i == cursorCol {
+					// Cursor highlighting (highest priority, overrides everything)
+					if lineNum == cursorRow && i == cursorCol {
 						style = styleCursor
 						applyStyle = true
 					}
@@ -610,6 +671,16 @@ func (m Model) View() string {
 	if m.goToLine {
 		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
 	}
+	if m.searching {
+		var counter string
+		if len(m.searchResults) > 0 {
+			counter = fmt.Sprintf(" (%d/%d)", m.currentResultIndex+1, len(m.searchResults))
+		} else if m.searchQuery != "" {
+			counter = " (no results)"
+		}
+		searchView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
+		return fmt.Sprintf("%s\n\n%s", baseView, searchView)
+	}
 	if m.loading {
 		// Calculate empty lines to push picker to bottom
 		pickerView := m.filePicker.View()
@@ -631,7 +702,12 @@ func (m Model) View() string {
 	// Status Bar
 	msg := m.statusMsg
 	if msg == "" {
-		msg = "Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save"
+		if len(m.searchResults) > 0 {
+			msg = fmt.Sprintf("Search: %s (%d/%d) | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search",
+				m.searchQuery, m.currentResultIndex+1, len(m.searchResults))
+		} else {
+			msg = "Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search"
+		}
 	}
 	// Pad status bar
 	width := m.Width
@@ -675,6 +751,7 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Ctrl+s", "Save"},
 		{"Ctrl+o", "Open File"},
 		{"Ctrl+g", "Go to Line"},
+		{"Ctrl+f", "Search"},
 		{"Ctrl+h", "Toggle Help"},
 		{"Ctrl+z", "Undo"},
 		{"Ctrl+Shift+z", "Redo"},
@@ -728,6 +805,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			lineCount = 1
 		}
 		m.textInput.Prompt = fmt.Sprintf("Go to line (1-%d): ", lineCount)
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.Search):
+		m.searching = true
+		m.textInput.Focus()
+		m.textInput.SetValue(m.searchQuery)
+		m.textInput.Prompt = "Search: "
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Open):
