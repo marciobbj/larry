@@ -114,7 +114,7 @@ Run Larry with the `-config` flag:
 - [x] Syntax highlighting
 - [x] Undo/redo functionality
 - [x] Search 
-- [] Replace
+- [ ] Replace
 - [x] Go to line
 - [ ] Markdown instant visualization
 - [ ] LSP support
