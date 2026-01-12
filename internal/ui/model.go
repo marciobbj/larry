@@ -71,7 +71,8 @@ var (
 	styleDir      = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
 	lineNumStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	borderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	borderStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	statusBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Background(lipgloss.Color("235"))
 )
 
 type OpType int
@@ -381,7 +382,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		m.TextArea.SetWidth(msg.Width)
-		m.TextArea.SetHeight(msg.Height)
+		m.TextArea.SetHeight(msg.Height - 1) // Reserve 1 line for status bar
 
 		// Reset yOffset to valid bounds after resize
 		if len(m.Lines) <= m.TextArea.Height() {
@@ -622,17 +623,24 @@ func (m Model) View() string {
 			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")), // transparent/black
 		)
 	}
-	/*
-		if m.statusMsg != "" {
-			return fmt.Sprintf("%s\n\n%s", baseView, m.statusMsg)
-		}
-	*/
 
 	if m.showHelp {
 		return m.viewHelpMenu(baseView)
 	}
 
-	return baseView
+	// Status Bar
+	msg := m.statusMsg
+	if msg == "" {
+		msg = "Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save"
+	}
+	// Pad status bar
+	width := m.Width
+	if width < len(msg) {
+		width = len(msg)
+	}
+	status := statusBarStyle.Width(width).Render(" " + msg)
+
+	return lipgloss.JoinVertical(lipgloss.Left, baseView, status)
 }
 
 func (m Model) viewHelpMenu(base string) string {
