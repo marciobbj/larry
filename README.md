@@ -41,12 +41,40 @@ Larry offers a perfect balance for users who need more power than Nano without t
    ```
 5. Run:
    ```bash
-   ./larry [filename]
+   ./larry [OPTIONS] [FILE]
    ```
+
+   Use `./larry --help` for detailed usage information.
 6. Add Larry to your PATH if you want:
    ```bash
    export PATH="<path_to_larry_bin/:$PATH"
-   ``` 
+   ```
+
+## Command Line Usage
+
+Larry supports several command line options for enhanced usage:
+
+### Arguments
+- `FILE`: Optional file to open on startup
+
+### Options
+- `-config <path>`: Load configuration from a JSON file
+- `-help`: Display help information and exit
+
+### Examples
+```bash
+# Start with empty file
+larry
+
+# Open a specific file
+larry myfile.txt
+
+# Open with custom configuration
+larry -config ~/.config/larry/config.json myfile.txt
+
+# Show help
+larry --help
+```
 
 ## Key Bindings
 

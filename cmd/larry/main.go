@@ -6,16 +6,23 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-	"larry/internal/config"
-	"larry/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.design/x/clipboard"
+	"larry/internal/config"
+	"larry/internal/ui"
+	"os"
 )
 
 func main() {
 	configPath := flag.String("config", "", "Path to configuration file")
+	help := flag.Bool("help", false, "Show help information")
 	flag.Parse()
+
+	// Show help if requested
+	if *help {
+		showHelp()
+		return
+	}
 
 	// Initialize the system clipboard
 	err := clipboard.Init()
@@ -58,4 +65,50 @@ func main() {
 		fmt.Printf("Error running the text editor: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func showHelp() {
+	fmt.Println(`Larry - The Text Editor
+
+A minimalist, high-performance TUI text editor written in Go.
+
+USAGE:
+  larry [OPTIONS] [FILE]
+
+ARGUMENTS:
+  FILE    Optional file to open on startup
+
+OPTIONS:
+  -config string    Path to configuration file (default: uses built-in defaults)
+  -help             Show this help information
+
+EXAMPLES:
+  # Start with empty file
+  larry
+
+  # Open a specific file
+  larry myfile.txt
+
+  # Open with custom configuration
+  larry -config ~/.config/larry/config.json myfile.txt
+
+  # Show help
+  larry --help
+
+CONFIGURATION:
+  Larry supports configuration via a JSON file specified with -config flag.
+
+  Configuration options:
+    theme       - Syntax highlighting theme (e.g., "dracula", "monokai", "nord")
+    tab_width   - Number of spaces for tab character (default: 4)
+    line_numbers - Show/hide line numbers (default: true)
+
+  Example config.json:
+    {
+      "theme": "dracula",
+      "tab_width": 4,
+      "line_numbers": true
+    }
+
+For more information, see the README.md file.`)
 }
