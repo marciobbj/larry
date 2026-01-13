@@ -117,7 +117,6 @@ Leader key is ctrl by default.
 | **Select Text** | `Shift+Arrow` |
 | **Select Word Left/Right** | `Leader+Shift+←/→` |
 | **Select 5 Lines Up/Down** | `Leader+Shift+↑/↓` |
-
 | **Select to Line Start** | `Shift+Home` |
 | **Select to Line End** | `Shift+End` |
 
