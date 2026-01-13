@@ -129,7 +129,7 @@ Larry includes an efficient text search feature powered by the **Boyer-Moore alg
 
 ### Global Finder
 
-The Global Finder is a powerful tool for navigating your project. Trigger it with `Ctrl+P` (or `Ctrl+Shift+F`).
+The Global Finder is a powerful tool for navigating your project. Trigger it with `Ctrl+P`.
 
 - **Fuzzy Search**: Search for files by name with fuzzy matching.
 - **Live Grep**: Search for text patterns across all files in your project in real-time.
