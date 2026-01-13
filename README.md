@@ -17,12 +17,14 @@ A minimalist, high-performance TUI text editor written in Go.
     - File Loading/Saving using modern file picker
     - Very easy to use and navigate.
 - **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
+- **Global Finder**: Powerful multi-purpose search tool (`Ctrl+P` or `Ctrl+Shift+F`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
 - **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
 - **UI**:
     - Clean, distraction-free interface
     - Absolute line numbers
     - Visual cursor, selection, and search result highlighting
-    - Status reporting (without clutter)
+    - Status reporting with automatic text wrapping
+    - Fully responsive design that handles terminal resizing elegantly
 
 ## Why should I use Larry?
 Larry offers a perfect balance for users who need more power than Nano without the steep learning curve of Vim. It delivers robust features in a simple, intuitive interface. It's very fast and it runs in your terminal.
@@ -85,6 +87,7 @@ larry --help
 | **Save** | `Ctrl+S` |
 | **Open File** | `Ctrl+O` |
 | **Search** | `Ctrl+F` |
+| **Global Finder** | `Ctrl+P` / `Ctrl+Shift+F` |
 | **Undo** | `Ctrl+Z` |
 | **Redo** | `Ctrl+R` |
 | **Copy** | `Ctrl+C` |
@@ -123,6 +126,16 @@ Larry includes an efficient text search feature powered by the **Boyer-Moore alg
 ### Search Features
 
 - **FAST** like a cat.
+
+### Global Finder
+
+The Global Finder is a powerful tool for navigating your project. Trigger it with `Ctrl+P` (or `Ctrl+Shift+F`).
+
+- **Fuzzy Search**: Search for files by name with fuzzy matching.
+- **Live Grep**: Search for text patterns across all files in your project in real-time.
+- **Switch Modes**: Use `Tab` to seamlessly switch between Fuzzy Search and Live Grep modes.
+- **Smart Filtering**: Automatically ignores binary and compiled files to ensure a clean search experience.
+- **Navigate Results**: Use `Up`/`Down` arrows to navigate through the results and press `Enter` to open the selection.
 
 ## Configuration
 
@@ -163,6 +176,7 @@ larry -config path/to/your/config.json
 - [x] Syntax highlighting
 - [x] Undo/redo functionality
 - [x] Search 
+- [x] Global Finder (Fuzzy & Live Grep)
 - [ ] Replace
 - [x] Go to line
 - [ ] Markdown instant visualization
@@ -172,6 +186,6 @@ larry -config path/to/your/config.json
 - [x] Theme support
 - [x] Add Help Menu and Docs
 - [ ] Add to a remote package manager
-- [ ] Improve resizing and responsiveness (add scaling etc)
+- [x] Improve resizing and responsiveness
 - [x] Agile navigation movements (Ctrl+arrows for word/line jumping)
 - [ ] Let Larry be more hackable, allowing users to add their own features, color schemes, etc

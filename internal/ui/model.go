@@ -41,6 +41,7 @@ type KeyMap struct {
 	GoToLine           key.Binding
 	ToggleHelp         key.Binding
 	Search             key.Binding
+	GlobalFinder       key.Binding
 	// Agile Navigation
 	JumpWordLeft      key.Binding
 	JumpWordRight     key.Binding
@@ -80,6 +81,7 @@ var DefaultKeyMap = KeyMap{
 	GoToLine:           key.NewBinding(key.WithKeys("ctrl+g")),
 	ToggleHelp:         key.NewBinding(key.WithKeys("ctrl+h")),
 	Search:             key.NewBinding(key.WithKeys("ctrl+f")),
+	GlobalFinder:       key.NewBinding(key.WithKeys("ctrl+p", "ctrl+shift+f")),
 	// Agile Navigation
 	JumpWordLeft:      key.NewBinding(key.WithKeys("ctrl+left")),
 	JumpWordRight:     key.NewBinding(key.WithKeys("ctrl+right")),
@@ -271,6 +273,8 @@ type Model struct {
 	loading            bool
 	goToLine           bool
 	searching          bool
+	finding            bool
+	finder             FinderModel
 	textInput          textinput.Model
 	filePicker         filepicker.Model
 	statusMsg          string
@@ -341,6 +345,8 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 		Config:             cfg,
 		showHelp:           false,
 		searching:          false,
+		finding:            false,
+		finder:             NewFinderModel(80, 20),
 		searchQuery:        "",
 		searchResults:      nil,
 		currentResultIndex: -1,
@@ -438,6 +444,47 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+
+	if m.finding {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "esc":
+				m.finding = false
+				return m, nil
+			case "enter":
+				if len(m.finder.results) > 0 {
+					res := m.finder.results[m.finder.cursor]
+					var path string
+					var targetRow int
+					if res.Mode == search.ModeFiles {
+						path = res.File.Path
+						targetRow = 0
+					} else {
+						path = res.Grep.Path
+						targetRow = res.Grep.Line - 1
+					}
+
+					content, err := os.ReadFile(path)
+					if err == nil {
+						m.Lines = strings.Split(string(content), "\n")
+						m.FileName = path
+						m.CursorRow = targetRow
+						m.CursorCol = 0
+						m = m.updateViewport()
+						m.TextArea.SetValue(string(content))
+						idx := getAbsoluteIndex(string(content), m.CursorRow, m.CursorCol)
+						m.TextArea.SetCursor(idx)
+					}
+					m.finding = false
+					return m, nil
+				}
+			}
+		}
+		var cmd tea.Cmd
+		m.finder, cmd = m.finder.Update(msg)
+		return m, cmd
+	}
 
 	if m.loading {
 		var cmd tea.Cmd
@@ -590,6 +637,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case searchMsg:
+		var cmd tea.Cmd
+		m.finder, cmd = m.finder.Update(msg)
+		return m, cmd
 	case tea.KeyMsg:
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
@@ -605,6 +656,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.TextArea.SetWidth(msg.Width)
 		m.TextArea.SetHeight(msg.Height - 1)
 
+		var finderCmd tea.Cmd
+		m.finder, finderCmd = m.finder.Update(msg)
+
 		if len(m.Lines) <= m.TextArea.Height() {
 			m.yOffset = 0
 		} else {
@@ -618,7 +672,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m = m.updateViewport()
-		return m, nil
+		return m, finderCmd
 	}
 
 	var taCmd tea.Cmd
@@ -834,6 +888,54 @@ func (m Model) View() string {
 		searchView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
 		return fmt.Sprintf("%s\n\n%s", baseView, searchView)
 	}
+	if m.finding {
+		finderView := m.finder.View()
+		w := lipgloss.Width(finderView)
+		h := lipgloss.Height(finderView)
+
+		maxW := m.Width - 4
+		maxH := m.Height - 4
+
+		if w > maxW {
+			w = maxW
+		}
+		if h > maxH {
+			h = maxH
+		}
+
+		bg := modalStyle.GetBackground()
+		spacerStyle := lipgloss.NewStyle().Background(bg)
+
+		titleText := "Global Larry Finder (Tab: Switch Mode)"
+		titleGap := w - lipgloss.Width(titleText)
+		if titleGap < 0 {
+			titleGap = 0
+		}
+		leftGap := titleGap / 2
+		rightGap := titleGap - leftGap
+		title := modalTitleStyle.Width(w).Render(strings.Repeat(" ", leftGap) + titleText + strings.Repeat(" ", rightGap))
+
+		var allLines []string
+		allLines = append(allLines, title)
+		allLines = append(allLines, spacerStyle.Copy().Width(w).Render(""))
+
+		finderLines := strings.Split(finderView, "\n")
+		for i, line := range finderLines {
+			if i >= maxH-2 {
+				break
+			}
+			styledLine := strings.ReplaceAll(line, " ", spacerStyle.Render(" "))
+			allLines = append(allLines, spacerStyle.Width(w).Render(styledLine))
+		}
+
+		modal := modalStyle.Render(strings.Join(allLines, "\n"))
+
+		return lipgloss.Place(
+			m.Width, m.Height,
+			lipgloss.Center, lipgloss.Center,
+			modal,
+		)
+	}
 	if m.loading {
 		pickerView := m.filePicker.View()
 		w := lipgloss.Width(pickerView)
@@ -888,17 +990,19 @@ func (m Model) View() string {
 	msg := m.statusMsg
 	if msg == "" {
 		if len(m.searchResults) > 0 {
-			msg = fmt.Sprintf("Search: %s (%d/%d) | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search",
+			msg = fmt.Sprintf("Search: %s (%d/%d) | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search File | Ctrl+p: Larry Finder",
 				m.searchQuery, m.currentResultIndex+1, len(m.searchResults))
 		} else {
-			msg = "Ctrl+o: Open File | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search"
+			msg = "Ctrl+o: Open File | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search File | Ctrl+p: Larry Finder"
 		}
 	}
 	width := m.Width
-	if width < len(msg) {
-		width = len(msg)
+	if width < 20 {
+		width = 20
 	}
-	status := statusBarStyle.Width(width).Render(" " + msg)
+
+	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(msg)
+	status := statusBarStyle.Width(width).Render(wrappedMsg)
 
 	return lipgloss.JoinVertical(lipgloss.Left, baseView, status)
 }
@@ -923,6 +1027,7 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Ctrl+o", "Open File"},
 		{"Ctrl+g", "Go to Line"},
 		{"Ctrl+f", "Search"},
+		{"Ctrl+p", "Global Finder"},
 		{"Ctrl+h", "Toggle Help"},
 		{"Ctrl+z", "Undo"},
 		{"Ctrl+R", "Redo"},
@@ -952,11 +1057,16 @@ func (m Model) viewHelpMenu(base string) string {
 	bg := helpStyle.GetBackground()
 	spacerStyle := lipgloss.NewStyle().Background(bg)
 
+	colWidth := (width - 20) / 2
+	if colWidth < 25 {
+		colWidth = 25
+	}
+
 	var leftColLines []string
 	leftColLines = append(leftColLines, categoryStyle.Render("General"))
 	for _, s := range generalShortcuts {
 		keyStr := keyStyle.Width(14).Render(s.Key)
-		descStr := descStyle.Render(s.Desc)
+		descStr := descStyle.Width(colWidth - 14).Render(s.Desc)
 		leftColLines = append(leftColLines, lipgloss.JoinHorizontal(lipgloss.Top, keyStr, descStr))
 	}
 
@@ -964,7 +1074,7 @@ func (m Model) viewHelpMenu(base string) string {
 	rightColLines = append(rightColLines, categoryStyle.Render("Navigation"))
 	for _, s := range navShortcuts {
 		keyStr := keyStyle.Width(18).Render(s.Key)
-		descStr := descStyle.Render(s.Desc)
+		descStr := descStyle.Width(colWidth - 18).Render(s.Desc)
 		rightColLines = append(rightColLines, lipgloss.JoinHorizontal(lipgloss.Top, keyStr, descStr))
 	}
 
@@ -1070,6 +1180,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.textInput.SetValue(m.searchQuery)
 		m.textInput.Prompt = "Search: "
 		return m, nil
+
+	case key.Matches(msg, m.KeyMap.GlobalFinder):
+		m.finding = true
+		m.finder = NewFinderModel(m.Width, m.Height)
+		return m, m.finder.performSearch()
 
 	case key.Matches(msg, m.KeyMap.Open):
 		m.loading = true
