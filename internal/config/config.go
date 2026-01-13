@@ -3,16 +3,15 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
-// Config holds the editor configuration
 type Config struct {
-	Theme       string `json:"theme"`        // Syntax highlight theme (e.g., "dracula", "monokai")
-	TabWidth    int    `json:"tab_width"`    // Number of spaces for tab
-	LineNumbers bool   `json:"line_numbers"` // Show line numbers
+	Theme       string `json:"theme"`
+	TabWidth    int    `json:"tab_width"`
+	LineNumbers bool   `json:"line_numbers"`
 }
 
-// DefaultConfig returns the default configuration
 func DefaultConfig() Config {
 	return Config{
 		Theme:       "dracula",
@@ -21,21 +20,32 @@ func DefaultConfig() Config {
 	}
 }
 
-// LoadConfig loads the configuration from a JSON file.
-// If the file doesn't exist or is invalid, it returns the default config (and potentially an error).
-// If only some fields are missing, it uses defaults for them (basic approach: defaults -> overwrite)
 func LoadConfig(path string) (Config, error) {
 	cfg := DefaultConfig()
+
+	if path == "" {
+		configDir, err := os.UserConfigDir()
+		if err == nil {
+			defaultPath := filepath.Join(configDir, "larry", "config.json")
+			if _, err := os.Stat(defaultPath); err == nil {
+				path = defaultPath
+			}
+		}
+	}
+
 	if path == "" {
 		return cfg, nil
 	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, err
 	}
+
 	err = json.Unmarshal(data, &cfg)
 	if err != nil {
 		return DefaultConfig(), err
 	}
+
 	return cfg, nil
 }

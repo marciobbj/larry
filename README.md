@@ -58,19 +58,19 @@ Larry supports several command line options for enhanced usage:
 - `FILE`: Optional file to open on startup
 
 ### Options
-- `-config <path>`: Load configuration from a JSON file
+- `-config <path>`: Load a specific configuration file (overrides default `~/.config/larry/config.json`)
 - `-help`: Display help information and exit
 
 ### Examples
 ```bash
-# Start with empty file
+# Start Larry (loads ~/.config/larry/config.json automatically if present)
 larry
 
 # Open a specific file
 larry myfile.txt
 
-# Open with custom configuration
-larry -config ~/.config/larry/config.json myfile.txt
+# Override the default configuration with a specific file
+larry -config ./custom_config.json myfile.txt
 
 # Show help
 larry --help
@@ -126,12 +126,17 @@ Larry includes an efficient text search feature powered by the **Boyer-Moore alg
 
 ## Configuration
 
-Larry supports configuration via a JSON file.
+Larry is designed to be easily customizable via a JSON configuration file. 
 
-### Usage
-Run Larry with the `-config` flag:
+### Automatic Loading
+Larry automatically looks for and loads its configuration from the following default location if it exists:
+`~/.config/larry/config.json`
+
+### Custom Configuration Override
+To use a different configuration file or override the default behavior, use the `-config` flag:
+
 ```bash
-./larry -config config.json
+larry -config path/to/your/config.json
 ```
 
 ### Configuration Options (`config.json`)
