@@ -16,11 +16,18 @@ var (
 )
 
 func init() {
-	// Load a default theme (e.g., Dracula or Monokai)
-	SetTheme("dracula")
+	if lipgloss.HasDarkBackground() {
+		SetTheme("dracula")
+	} else {
+		SetTheme("github")
+	}
 }
 
 func SetTheme(themeName string) {
+	if themeName == "dracula" && !lipgloss.HasDarkBackground() {
+		themeName = "github"
+	}
+
 	t := styles.Get(themeName)
 	if t == nil {
 		t = styles.Fallback
@@ -98,9 +105,6 @@ func getStyleForToken(tokenType chroma.TokenType) lipgloss.Style {
 
 	if entry.Colour.IsSet() {
 		style = style.Foreground(lipgloss.Color(entry.Colour.String()))
-	}
-	if entry.Background.IsSet() {
-		style = style.Background(lipgloss.Color(entry.Background.String()))
 	}
 	if entry.Bold == chroma.Yes {
 		style = style.Bold(true)
