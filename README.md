@@ -12,7 +12,7 @@ A minimalist, high-performance TUI text editor written in Go.
 
 - **Optimized File Loader**: Custom rendering engine optimizing performance for large files (O(1) input, O(H) rendering).
 - **Core Functionality**:
-    - Easy navigation with Larry Movements (more info in the key bindings section)
+    - Navigate through your files fast like a cat with Larry Movements (more info in the key bindings section). 
     - Standard commands like copy, cut, paste, undo, redo, select all, etc. No need to learn new commands.
     - File Loading/Saving using modern file picker
     - Very easy to use and navigate.
