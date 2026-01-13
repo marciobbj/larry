@@ -171,7 +171,6 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	ta.Placeholder = "Digite algo..."
 	ta.SetValue(content)
 	ta.Focus()
-	//styles.setupStyle()
 
 	ti := textinput.New()
 	ti.Placeholder = "filename.txt"
@@ -219,7 +218,6 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 
 func getCol(ta textarea.Model) int {
 	li := ta.LineInfo()
-	// Together they give the correct logical column index.
 	return li.StartColumn + li.CharOffset
 }
 
@@ -227,7 +225,6 @@ func getRow(ta textarea.Model) int {
 	return ta.Line()
 }
 
-// deleteSelection removes the selected text and positions cursor at start of selection.
 func (m *Model) deleteSelection() bool {
 	if !m.selecting {
 		return false
@@ -239,14 +236,12 @@ func (m *Model) deleteSelection() bool {
 		return false
 	}
 
-	// Get current cursor position
 	curRow := getRow(m.TextArea)
 	curCol := getCol(m.TextArea)
 
 	startIdx := getAbsoluteIndex(val, m.startRow, m.startCol)
 	endIdx := getAbsoluteIndex(val, curRow, curCol)
 
-	// Determine which position is the "start" (leftmost) of the selection
 	targetRow := m.startRow
 	targetCol := m.startCol
 	if startIdx > endIdx {
@@ -255,7 +250,6 @@ func (m *Model) deleteSelection() bool {
 		targetCol = curCol
 	}
 
-	// Convert to rune slice to handle unicode correctly
 	runes := []rune(val)
 	if startIdx >= len(runes) {
 		startIdx = len(runes)
@@ -264,14 +258,11 @@ func (m *Model) deleteSelection() bool {
 		endIdx = len(runes)
 	}
 
-	// Create new content without selected text
 	newRunes := append(runes[:startIdx], runes[endIdx:]...)
 	newVal := string(newRunes)
 
-	// Set the new value
 	m.TextArea.SetValue(newVal)
 
-	// Position cursor at the start of where selection was
 	lines := strings.Split(newVal, "\n")
 	if targetRow >= len(lines) {
 		targetRow = len(lines) - 1
@@ -280,18 +271,15 @@ func (m *Model) deleteSelection() bool {
 		targetRow = 0
 	}
 
-	// Move cursor to beginning of document (line 0, col 0)
 	for getRow(m.TextArea) > 0 {
 		m.TextArea.CursorUp()
 	}
 	m.TextArea.CursorStart()
 
-	// Navigate to target row
 	for i := 0; i < targetRow; i++ {
 		m.TextArea.CursorDown()
 	}
 
-	// Set column position - ensure it's within bounds of the new line
 	if targetRow < len(lines) && targetCol > len([]rune(lines[targetRow])) {
 		targetCol = len([]rune(lines[targetRow]))
 	}
@@ -328,7 +316,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				m.statusMsg = "Error opening: " + err.Error()
 			} else {
-				// Replaced TextArea logic with manual Lines logic
 				m.Lines = strings.Split(string(content), "\n")
 				m.statusMsg = "Opened: " + path
 				m.FileName = path
@@ -340,7 +327,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = false
 			return m, cmd
 		}
-		// Handle user manual quit via Esc
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
 			m.loading = false
 		}
@@ -359,7 +345,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if filename == "" {
 					filename = "untitled.txt"
 				}
-				// Save from m.Lines
 				content := strings.Join(m.Lines, "\n")
 				err := os.WriteFile(filename, []byte(content), 0644)
 				if err != nil {
@@ -389,7 +374,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var targetLine int
 				_, err := fmt.Sscanf(lineStr, "%d", &targetLine)
 				if err == nil {
-					targetLine-- // Adjust from 1-indexed UI to 0-indexed code
+					targetLine--
 					if targetLine < 0 {
 						targetLine = 0
 					}
@@ -425,19 +410,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEnter:
 				query := m.textInput.Value()
 				if query != "" && query != m.searchQuery {
-					// New search
 					m.searchQuery = query
 					searcher := search.NewBoyerMooreSearch(query)
 					m.searchResults = searcher.SearchInLines(m.Lines)
 					m.currentResultIndex = -1
 				}
-				// Navigate to next result or first result
 				if len(m.searchResults) > 0 {
 					m.currentResultIndex = (m.currentResultIndex + 1) % len(m.searchResults)
 					result := m.searchResults[m.currentResultIndex]
 					m.CursorRow = result.Line
 					m.CursorCol = result.Col
-					m = m.updateViewport()
+
+					idx := getAbsoluteIndex(strings.Join(m.Lines, "\n"), m.CursorRow, m.CursorCol)
+					m.TextArea.SetCursor(idx)
+
+					textWidth := m.TextArea.Width()
+					if m.Config.LineNumbers {
+						textWidth -= 6
+					}
+					textWidth -= 1
+					if textWidth < 1 {
+						textWidth = 1
+					}
+
+					cursorVisualLine := m.getCursorVisualOffset(textWidth)
+					availableHeight := m.TextArea.Height() - 2
+					targetOffset := cursorVisualLine - (availableHeight / 2)
+					if targetOffset < 0 {
+						targetOffset = 0
+					}
+					m.yOffset = targetOffset
 				}
 				return m, nil
 			}
@@ -470,9 +472,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		m.TextArea.SetWidth(msg.Width)
-		m.TextArea.SetHeight(msg.Height - 1) // Reserve 1 line for status bar
+		m.TextArea.SetHeight(msg.Height - 1)
 
-		// Reset yOffset to valid bounds after resize
 		if len(m.Lines) <= m.TextArea.Height() {
 			m.yOffset = 0
 		} else {
@@ -490,19 +491,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var taCmd tea.Cmd
-
-	// Fallback for non-key messages
 	if _, ok := msg.(tea.KeyMsg); !ok {
-		// Only pass non-key messages (like blink)
 		m.TextArea, taCmd = m.TextArea.Update(msg)
-	}
-
-	// Adjust Viewport Y-Offset based on CursorRow
-	if m.CursorRow < m.yOffset {
-		m.yOffset = m.CursorRow
-	}
-	if m.CursorRow >= m.yOffset+m.TextArea.Height() {
-		m.yOffset = m.CursorRow - m.TextArea.Height() + 1
 	}
 
 	return m, taCmd
@@ -515,11 +505,7 @@ func (m Model) View() string {
 
 	baseView := ""
 
-	// Use Optimized Custom View for Editor
-	// val := m.TextArea.Value()
-
 	if len(m.Lines) == 0 && !m.loading {
-		// Just render one empty line with cursor
 		s := strings.Builder{}
 		s.WriteString(borderStyle.Render("│"))
 		if m.Config.LineNumbers {
@@ -529,12 +515,10 @@ func (m Model) View() string {
 		s.WriteString("\n")
 		baseView = s.String()
 	} else {
-		// Prepare selection ranges (Row/Col based)
 		selStartRow, selStartCol := -1, -1
 		selEndRow, selEndCol := -1, -1
 
 		if m.selecting {
-			// Normalize start/end
 			sRow, sCol := m.startRow, m.startCol
 			eRow, eCol := m.CursorRow, m.CursorCol
 
@@ -545,11 +529,9 @@ func (m Model) View() string {
 			selEndRow, selEndCol = eRow, eCol
 		}
 
-		// Cursor tracking
 		cursorRow := m.CursorRow
 		cursorCol := m.CursorCol
 
-		// Calculate available width
 		textWidth := m.TextArea.Width()
 		if m.Config.LineNumbers {
 			textWidth -= 6
@@ -566,11 +548,14 @@ func (m Model) View() string {
 		visualLinesRendered := 0
 		currentVisualLineIndex := 0
 
+		if m.searching {
+			maxVisualLines -= 2
+		}
+
 		for lineNum := 0; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 			line := lines[lineNum]
 			lineRunes := []rune(line)
 
-			// Helper to render a chunk
 			renderChunk := func(runes []rune, startIdx, endIdx int, isFirst bool, currentLineVisualWidth int) {
 				if visualLinesRendered >= maxVisualLines {
 					return
@@ -597,13 +582,11 @@ func (m Model) View() string {
 					var style lipgloss.Style
 					applyStyle := false
 
-					// Base syntax highlighting
 					if i < len(syntaxStyles) {
 						style = syntaxStyles[i]
 						applyStyle = true
 					}
 
-					// Search highlighting (can override syntax)
 					if len(m.searchResults) > 0 {
 						for _, result := range m.searchResults {
 							if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
@@ -614,7 +597,6 @@ func (m Model) View() string {
 						}
 					}
 
-					// Selection highlighting (can override search and syntax)
 					if m.selecting {
 						isSelected := false
 						if lineNum > selStartRow && lineNum < selEndRow {
@@ -638,7 +620,6 @@ func (m Model) View() string {
 						}
 					}
 
-					// Cursor highlighting (highest priority, overrides everything)
 					if lineNum == cursorRow && i == cursorCol {
 						style = styleCursor
 						applyStyle = true
@@ -740,7 +721,6 @@ func (m Model) View() string {
 		return m.viewHelpMenu(baseView)
 	}
 
-	// Status Bar
 	msg := m.statusMsg
 	if msg == "" {
 		if len(m.searchResults) > 0 {
@@ -750,7 +730,6 @@ func (m Model) View() string {
 			msg = "Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search"
 		}
 	}
-	// Pad status bar
 	width := m.Width
 	if width < len(msg) {
 		width = len(msg)
@@ -764,7 +743,6 @@ func (m Model) viewHelpMenu(base string) string {
 	width := m.Width
 	height := m.Height
 
-	// Ensure we have valid dimensions
 	if width <= 0 {
 		width = 80
 	}
@@ -772,7 +750,6 @@ func (m Model) viewHelpMenu(base string) string {
 		height = 24
 	}
 
-	// Define visual style for the help menu
 	helpStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("62")).
@@ -801,7 +778,6 @@ func (m Model) viewHelpMenu(base string) string {
 		Foreground(lipgloss.Color("241")).
 		MarginTop(1)
 
-	// Left column: General shortcuts
 	generalShortcuts := []struct {
 		Key  string
 		Desc string
@@ -820,7 +796,6 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Ctrl+a", "Select All"},
 	}
 
-	// Right column: Navigation shortcuts
 	navShortcuts := []struct {
 		Key  string
 		Desc string
@@ -838,7 +813,6 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Ctrl+End", "File End"},
 	}
 
-	// Build left column
 	var leftCol strings.Builder
 	leftCol.WriteString(categoryStyle.Render("General"))
 	leftCol.WriteString("\n")
@@ -846,7 +820,6 @@ func (m Model) viewHelpMenu(base string) string {
 		leftCol.WriteString(fmt.Sprintf("%-14s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
 	}
 
-	// Build right column
 	var rightCol strings.Builder
 	rightCol.WriteString(categoryStyle.Render("Navigation"))
 	rightCol.WriteString("\n")
@@ -854,15 +827,12 @@ func (m Model) viewHelpMenu(base string) string {
 		rightCol.WriteString(fmt.Sprintf("%-18s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
 	}
 
-	// Combine columns side by side
 	leftColStyled := lipgloss.NewStyle().MarginRight(3).Render(leftCol.String())
 	rightColStyled := lipgloss.NewStyle().Render(rightCol.String())
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftColStyled, rightColStyled)
 
-	// Calculate content width for centering title
 	contentWidth := lipgloss.Width(columns)
 
-	// Build final menu with centered title
 	title := "Larry - Help Menu"
 	centeredTitle := lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(titleStyle.Render(title))
 	footer := "Press Esc or Ctrl+h to close"
@@ -877,7 +847,6 @@ func (m Model) viewHelpMenu(base string) string {
 
 	helpMenu := helpStyle.Render(sb.String())
 
-	// Center the help menu on screen
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, helpMenu)
 }
 
@@ -935,7 +904,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.startRow = 0
 		m.startCol = 0
 		m.CursorRow = len(m.Lines) - 1
-		// Check valid cursor row
 		if m.CursorRow < 0 {
 			m.CursorRow = 0
 		}
@@ -981,7 +949,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
-	// UP
 	case key.Matches(msg, m.KeyMap.CursorUp) || key.Matches(msg, m.KeyMap.MoveSelectionUp):
 		if key.Matches(msg, m.KeyMap.MoveSelectionUp) {
 			if !m.selecting {
@@ -1001,7 +968,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 
-	// DOWN
 	case key.Matches(msg, m.KeyMap.CursorDown) || key.Matches(msg, m.KeyMap.MoveSelectionDown):
 		if key.Matches(msg, m.KeyMap.MoveSelectionDown) {
 			if !m.selecting {
@@ -1019,7 +985,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 
-	// LEFT
 	case key.Matches(msg, m.KeyMap.CursorLeft) || key.Matches(msg, m.KeyMap.MoveSelectionLeft):
 		if key.Matches(msg, m.KeyMap.MoveSelectionLeft) {
 			if !m.selecting {
@@ -1036,7 +1001,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.CursorCol = len([]rune(m.Lines[m.CursorRow]))
 		}
 
-	// RIGHT
 	case key.Matches(msg, m.KeyMap.CursorRight) || key.Matches(msg, m.KeyMap.MoveSelectionRight):
 		if key.Matches(msg, m.KeyMap.MoveSelectionRight) {
 			if !m.selecting {
@@ -1054,7 +1018,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.CursorCol = 0
 		}
 
-	// JUMP WORD RIGHT (Ctrl+Right)
 	case key.Matches(msg, m.KeyMap.JumpWordRight) || key.Matches(msg, m.KeyMap.SelectWordRight):
 		if key.Matches(msg, m.KeyMap.SelectWordRight) {
 			if !m.selecting {
@@ -1066,7 +1029,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.CursorRow, m.CursorCol = FindNextWordBoundary(m.Lines, m.CursorRow, m.CursorCol)
 
-	// JUMP WORD LEFT (Ctrl+Left)
 	case key.Matches(msg, m.KeyMap.JumpWordLeft) || key.Matches(msg, m.KeyMap.SelectWordLeft):
 		if key.Matches(msg, m.KeyMap.SelectWordLeft) {
 			if !m.selecting {
@@ -1078,7 +1040,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.CursorRow, m.CursorCol = FindPrevWordBoundary(m.Lines, m.CursorRow, m.CursorCol)
 
-	// JUMP LINES UP (Ctrl+Up)
 	case key.Matches(msg, m.KeyMap.JumpLinesUp) || key.Matches(msg, m.KeyMap.SelectLinesUp):
 		if key.Matches(msg, m.KeyMap.SelectLinesUp) {
 			if !m.selecting {
@@ -1090,7 +1051,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.CursorRow, m.CursorCol = JumpLinesUp(m.Lines, m.CursorRow, m.CursorCol)
 
-	// JUMP LINES DOWN (Ctrl+Down)
 	case key.Matches(msg, m.KeyMap.JumpLinesDown) || key.Matches(msg, m.KeyMap.SelectLinesDown):
 		if key.Matches(msg, m.KeyMap.SelectLinesDown) {
 			if !m.selecting {
@@ -1102,7 +1062,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.CursorRow, m.CursorCol = JumpLinesDown(m.Lines, m.CursorRow, m.CursorCol)
 
-	// HOME (Line Start)
 	case key.Matches(msg, m.KeyMap.LineStart) || key.Matches(msg, m.KeyMap.SelectToLineStart):
 		if key.Matches(msg, m.KeyMap.SelectToLineStart) {
 			if !m.selecting {
@@ -1114,7 +1073,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.CursorRow, m.CursorCol = MoveToLineStart(m.CursorRow, m.CursorCol)
 
-	// END (Line End)
 	case key.Matches(msg, m.KeyMap.LineEnd) || key.Matches(msg, m.KeyMap.SelectToLineEnd):
 		if key.Matches(msg, m.KeyMap.SelectToLineEnd) {
 			if !m.selecting {
@@ -1126,27 +1084,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.CursorRow, m.CursorCol = MoveToLineEnd(m.Lines, m.CursorRow)
 
-	// FILE START (Ctrl+Home)
 	case key.Matches(msg, m.KeyMap.FileStart):
 		m.selecting = false
 		m.CursorRow, m.CursorCol = MoveToFileStart()
 
-	// FILE END (Ctrl+End)
 	case key.Matches(msg, m.KeyMap.FileEnd):
 		m.selecting = false
 		m.CursorRow, m.CursorCol = MoveToFileEnd(m.Lines)
 
-	// Typing (Chars) and Space
 	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
-		// Logic to handle deleting selection before typing
 		if m.selecting {
 			text := m.getSelectedText()
 			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
 			m = m.deleteSelectedText()
-			// We should probably group this with the insert?
-			// For now, it's 2 atomic ops: Delete Selection, then Insert Char.
-			// Ideally they should be 1 transaction.
-			// But sticking to simple 1:1 for now.
 		}
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
 			m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: string(msg.Runes)})
@@ -1167,7 +1117,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.CursorCol += len(runes)
 		}
 
-	// Backspace
 	case msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete || key.Matches(msg, m.KeyMap.Delete):
 		if m.selecting {
 			text := m.getSelectedText()
@@ -1183,7 +1132,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.Lines[m.CursorRow] = string(newLine)
 				m.CursorCol--
 			} else if m.CursorRow > 0 {
-				// Deleting newline from previous line
 				prevLine := m.Lines[m.CursorRow-1]
 				currLine := m.Lines[m.CursorRow]
 				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow - 1, Col: len([]rune(prevLine)), Text: "\n"})
@@ -1196,7 +1144,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 
-	// Tab
 	case msg.Type == tea.KeyTab:
 		if m.selecting {
 			text := m.getSelectedText()
@@ -1209,11 +1156,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.insertTextAtCursor(tab)
 		return m, nil
 
-	// Shift+Tab (Dedent)
 	case msg.Type == tea.KeyShiftTab:
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
 			line := m.Lines[m.CursorRow]
-			// Check for leading spaces
 			spacesToRemove := 0
 			for i, r := range line {
 				if i >= 4 {
@@ -1228,14 +1173,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 			if spacesToRemove > 0 {
 				dedentText := line[:spacesToRemove]
-
-				// Record Undo (removed text at start of line: Col 0)
 				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: 0, Text: dedentText})
-
-				// Remove from line
 				m.Lines[m.CursorRow] = line[spacesToRemove:]
-
-				// Adjust cursor
 				m.CursorCol -= spacesToRemove
 				if m.CursorCol < 0 {
 					m.CursorCol = 0
@@ -1244,7 +1183,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
-	// Enter
 	case msg.Type == tea.KeyEnter:
 		if m.selecting {
 			text := m.getSelectedText()
@@ -1260,7 +1198,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			suffix := line[m.CursorCol:]
 
 			m.Lines[m.CursorRow] = string(prefix)
-			// Efficiently insert new line
 			newLines := make([]string, 0, len(m.Lines)+1)
 			newLines = append(newLines, m.Lines[:m.CursorRow+1]...)
 			newLines = append(newLines, string(suffix))
@@ -1281,7 +1218,6 @@ func getAbsoluteIndex(value string, row, col int) int {
 
 	lines := strings.Split(value, "\n")
 
-	// Ensure row is within bounds
 	if row < 0 {
 		row = 0
 	}
@@ -1289,13 +1225,11 @@ func getAbsoluteIndex(value string, row, col int) int {
 		row = len(lines) - 1
 	}
 
-	// Calculate rune index
 	runeIndex := 0
 	for i := 0; i < row; i++ {
-		runeIndex += len([]rune(lines[i])) + 1 // +1 for the \n
+		runeIndex += len([]rune(lines[i])) + 1
 	}
 
-	// Ensure col is within bounds of the current line (in runes)
 	lineRunes := []rune(lines[row])
 	if col < 0 {
 		col = 0
@@ -1306,7 +1240,6 @@ func getAbsoluteIndex(value string, row, col int) int {
 
 	runeIndex += col
 
-	// Final bounds check against total rune count
 	totalRunes := len([]rune(value))
 	if runeIndex > totalRunes {
 		runeIndex = totalRunes
@@ -1347,7 +1280,6 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 		totalVisualLines += m.getVisualLineCount(i, textWidth)
 	}
 
-	// Visual offset within the current line
 	line := []rune(m.Lines[m.CursorRow])
 	currentLineVisualLine := 0
 	visualWidth := 0
@@ -1372,7 +1304,7 @@ func (m Model) updateViewport() Model {
 	if m.TextArea.ShowLineNumbers {
 		textWidth -= 6
 	}
-	textWidth -= 1 // Border
+	textWidth -= 1
 	if textWidth < 1 {
 		textWidth = 1
 	}
@@ -1396,7 +1328,6 @@ func (m Model) getSelectedText() string {
 	startRow, startCol := m.startRow, m.startCol
 	endRow, endCol := m.CursorRow, m.CursorCol
 
-	// Normalize order
 	if startRow > endRow || (startRow == endRow && startCol > endCol) {
 		startRow, endRow = endRow, startRow
 		startCol, endCol = endCol, startCol
@@ -1417,20 +1348,17 @@ func (m Model) getSelectedText() string {
 	}
 
 	var builder strings.Builder
-	// First line
 	line := []rune(m.Lines[startRow])
 	if startCol < len(line) {
 		builder.WriteString(string(line[startCol:]))
 	}
 	builder.WriteString("\n")
 
-	// Middle lines
 	for i := startRow + 1; i < endRow; i++ {
 		builder.WriteString(m.Lines[i])
 		builder.WriteString("\n")
 	}
 
-	// Last line
 	line = []rune(m.Lines[endRow])
 	if endCol > len(line) {
 		endCol = len(line)
@@ -1450,16 +1378,13 @@ func (m Model) deleteSelectedText() Model {
 	startRow, startCol := m.startRow, m.startCol
 	endRow, endCol := m.CursorRow, m.CursorCol
 
-	// Normalize order
 	if startRow > endRow || (startRow == endRow && startCol > endCol) {
 		startRow, endRow = endRow, startRow
 		startCol, endCol = endCol, startCol
 	}
 
-	// Single line deletion
 	if startRow == endRow {
 		line := []rune(m.Lines[startRow])
-		// Check bounds
 		if startCol < 0 {
 			startCol = 0
 		}
@@ -1475,25 +1400,19 @@ func (m Model) deleteSelectedText() Model {
 		return m
 	}
 
-	// Multi-line deletion
-	// Start line prefix
 	startLine := []rune(m.Lines[startRow])
 	if startCol > len(startLine) {
 		startCol = len(startLine)
 	}
 	prefix := string(startLine[:startCol])
 
-	// End line suffix
 	endLine := []rune(m.Lines[endRow])
 	if endCol > len(endLine) {
 		endCol = len(endLine)
 	}
 	suffix := string(endLine[endCol:])
 
-	// Merge
 	m.Lines[startRow] = prefix + suffix
-
-	// Delete intermediate lines
 	m.Lines = append(m.Lines[:startRow+1], m.Lines[endRow+1:]...)
 
 	m.CursorRow = startRow
@@ -1507,18 +1426,15 @@ func (m Model) insertTextAtCursor(text string) Model {
 		return m
 	}
 
-	// Split input text by newline
-	// Note: Normalize CRLF?
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	linesToInsert := strings.Split(text, "\n")
 
-	// Current Line separation
 	row := m.CursorRow
 	col := m.CursorCol
 	if row >= len(m.Lines) {
 		row = len(m.Lines) - 1
-	} // Safety
+	}
 	if row < 0 {
 		row = 0
 		m.Lines = []string{""}
@@ -1533,16 +1449,10 @@ func (m Model) insertTextAtCursor(text string) Model {
 	suffix := string(line[col:])
 
 	if len(linesToInsert) == 1 {
-		// Single line insert
 		m.Lines[row] = prefix + linesToInsert[0] + suffix
 		m.CursorCol += len([]rune(linesToInsert[0]))
 	} else {
-		// Multi-line insert
-		// 1. Current row becomes Prefix + First Insert Line
 		m.Lines[row] = prefix + linesToInsert[0]
-
-		// 2. Middle lines are inserted as-is
-		// 3. Last inserted line + Suffix becomes a new line
 		var middleLines []string
 		for i := 1; i < len(linesToInsert)-1; i++ {
 			middleLines = append(middleLines, linesToInsert[i])
@@ -1551,7 +1461,6 @@ func (m Model) insertTextAtCursor(text string) Model {
 		lastInsertLine := linesToInsert[len(linesToInsert)-1]
 		lastLineContent := lastInsertLine + suffix
 
-		// Reconstruct slice
 		newLines := make([]string, 0)
 		newLines = append(newLines, m.Lines[:row+1]...)
 		newLines = append(newLines, middleLines...)
@@ -1577,7 +1486,6 @@ func (m Model) clipboardWrite(text string) error {
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		// Try wl-copy on failure (Wayland)
 		if runtime.GOOS == "linux" {
 			wlCmd := exec.Command("wl-copy")
 			wlCmd.Stdin = strings.NewReader(text)
@@ -1600,7 +1508,6 @@ func (m Model) clipboardRead() (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		// Try wl-paste (Wayland)
 		if runtime.GOOS == "linux" {
 			wlCmd := exec.Command("wl-paste")
 			outWl, errWl := wlCmd.Output()
@@ -1615,7 +1522,7 @@ func (m Model) clipboardRead() (string, error) {
 
 func (m *Model) pushUndo(op EditOp) {
 	m.UndoStack = append(m.UndoStack, op)
-	m.RedoStack = nil // Clear redo stack on new operation
+	m.RedoStack = nil
 }
 
 func (m Model) undo() Model {
@@ -1624,7 +1531,6 @@ func (m Model) undo() Model {
 		return m
 	}
 
-	// Pop
 	op := m.UndoStack[len(m.UndoStack)-1]
 	m.UndoStack = m.UndoStack[:len(m.UndoStack)-1]
 
@@ -1663,7 +1569,6 @@ func (m Model) redo() Model {
 		return m
 	}
 
-	// Pop
 	op := m.RedoStack[len(m.RedoStack)-1]
 	m.RedoStack = m.RedoStack[:len(m.RedoStack)-1]
 
