@@ -17,7 +17,7 @@ A minimalist, high-performance TUI text editor written in Go.
     - File Loading/Saving using modern file picker
     - Very easy to use and navigate.
 - **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
-- **Global Finder**: Powerful multi-purpose search tool (`Ctrl+P` or `Ctrl+Shift+F`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
+- **Global Finder**: Powerful multi-purpose search tool (`Ctrl+P`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
 - **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
 - **UI**:
     - Clean, distraction-free interface
