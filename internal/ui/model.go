@@ -117,6 +117,8 @@ var (
 	keyStyle       lipgloss.Style
 	descStyle      lipgloss.Style
 	footerStyle    lipgloss.Style
+
+	textInputStyle lipgloss.Style
 )
 
 func initStyles() {
@@ -126,8 +128,8 @@ func initStyles() {
 		styleCursor = lipgloss.NewStyle().Background(lipgloss.Color("252")).Foreground(lipgloss.Color("0"))
 		styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255"))
 		styleSearch = lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0"))
-		styleFile = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-		styleDir = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
+		styleFile = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("235"))
+		styleDir = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true).Background(lipgloss.Color("235"))
 		lineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		borderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 		statusBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Background(lipgloss.Color("237"))
@@ -137,9 +139,9 @@ func initStyles() {
 			Padding(1, 2).
 			Background(lipgloss.Color("235"))
 		modalTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("212")).
+			Foreground(lipgloss.Color("170")).
+			Background(lipgloss.Color("235")).
 			Bold(true).
-			MarginBottom(1).
 			Align(lipgloss.Center)
 
 		helpStyle = lipgloss.NewStyle().
@@ -149,27 +151,43 @@ func initStyles() {
 			Background(lipgloss.Color("236")).
 			Foreground(lipgloss.Color("252"))
 		helpTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
-			Bold(true).
-			MarginBottom(1)
+			Foreground(lipgloss.Color("170")).
+			Background(lipgloss.Color("236")).
+			Bold(true)
 		categoryStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("117")).
-			Bold(true).
-			MarginTop(1)
+			Foreground(lipgloss.Color("81")).
+			Background(lipgloss.Color("236")).
+			Bold(true)
 		keyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("154")).
+			Foreground(lipgloss.Color("118")).
+			Background(lipgloss.Color("236")).
 			Bold(true)
 		descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("248"))
+			Foreground(lipgloss.Color("248")).
+			Background(lipgloss.Color("236"))
 		footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
+			Background(lipgloss.Color("236"))
+
+		keyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("118")).
+			Background(lipgloss.Color("236")).
+			Bold(true)
+		descStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("248")).
+			Background(lipgloss.Color("236"))
+		footerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")).
+			Background(lipgloss.Color("236")).
 			MarginTop(1)
+
+		textInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	} else {
 		styleCursor = lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("255"))
 		styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("153")).Foreground(lipgloss.Color("0"))
 		styleSearch = lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0"))
-		styleFile = lipgloss.NewStyle().Foreground(lipgloss.Color("0"))
-		styleDir = lipgloss.NewStyle().Foreground(lipgloss.Color("57"))
+		styleFile = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("254"))
+		styleDir = lipgloss.NewStyle().Foreground(lipgloss.Color("27")).Bold(true).Background(lipgloss.Color("254"))
 		lineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 		borderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 		statusBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("235")).Background(lipgloss.Color("252"))
@@ -179,9 +197,9 @@ func initStyles() {
 			Padding(1, 2).
 			Background(lipgloss.Color("254"))
 		modalTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("161")).
+			Foreground(lipgloss.Color("125")).
+			Background(lipgloss.Color("254")).
 			Bold(true).
-			MarginBottom(1).
 			Align(lipgloss.Center)
 
 		helpStyle = lipgloss.NewStyle().
@@ -191,21 +209,37 @@ func initStyles() {
 			Background(lipgloss.Color("254")).
 			Foreground(lipgloss.Color("235"))
 		helpTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("161")).
-			Bold(true).
-			MarginBottom(1)
+			Foreground(lipgloss.Color("125")).
+			Background(lipgloss.Color("254")).
+			Bold(true)
 		categoryStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("27")).
-			Bold(true).
-			MarginTop(1)
+			Foreground(lipgloss.Color("25")).
+			Background(lipgloss.Color("254")).
+			Bold(true)
 		keyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("28")).
+			Foreground(lipgloss.Color("22")).
+			Background(lipgloss.Color("254")).
 			Bold(true)
 		descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
+			Foreground(lipgloss.Color("240")).
+			Background(lipgloss.Color("254"))
 		footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("244")).
+			Background(lipgloss.Color("254"))
+
+		keyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("22")).
+			Background(lipgloss.Color("254")).
+			Bold(true)
+		descStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Background(lipgloss.Color("254"))
+		footerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("244")).
+			Background(lipgloss.Color("254")).
 			MarginTop(1)
+
+		textInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0"))
 	}
 }
 
@@ -254,6 +288,9 @@ type Model struct {
 }
 
 func InitialModel(filename string, content string, cfg config.Config) Model {
+	SetTheme(cfg.Theme)
+	initStyles()
+
 	ta := textarea.New()
 	ta.SetWidth(80)
 	ta.SetHeight(20)
@@ -266,6 +303,8 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	ti.Prompt = "Filename: "
 	ti.CharLimit = 156
 	ti.Width = 20
+	ti.PromptStyle = textInputStyle
+	ti.TextStyle = textInputStyle
 
 	fp := filepicker.New()
 	fp.AllowedTypes = nil // All files
@@ -276,9 +315,11 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	fp.Styles.Selected = styleSelected
 	fp.Styles.File = styleFile
 	fp.Styles.Directory = styleDir
-
-	SetTheme(cfg.Theme)
-	initStyles()
+	fp.Styles.Permission = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(modalStyle.GetBackground())
+	fp.Styles.FileSize = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(modalStyle.GetBackground())
+	fp.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(modalStyle.GetBackground())
+	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Background(modalStyle.GetBackground())
+	fp.Styles.Selected = styleSelected
 
 	return Model{
 		TextArea:           ta,
@@ -794,11 +835,44 @@ func (m Model) View() string {
 		return fmt.Sprintf("%s\n\n%s", baseView, searchView)
 	}
 	if m.loading {
-		title := modalTitleStyle.Render("Open File")
 		pickerView := m.filePicker.View()
+		w := lipgloss.Width(pickerView)
+		if w < 40 {
+			w = 40
+		}
 
-		content := lipgloss.JoinVertical(lipgloss.Left, title, pickerView)
-		modal := modalStyle.Render(content)
+		bg := modalStyle.GetBackground()
+		spacerStyle := lipgloss.NewStyle().Background(bg)
+
+		titleText := "Open File"
+		titleGap := w - lipgloss.Width(titleText)
+		leftGap := titleGap / 2
+		rightGap := titleGap - leftGap
+		title := modalTitleStyle.Width(w).Render(strings.Repeat(" ", leftGap) + titleText + strings.Repeat(" ", rightGap))
+
+		var allLines []string
+		allLines = append(allLines, title)
+		allLines = append(allLines, spacerStyle.Copy().Width(w).Render(""))
+
+		pickerLines := strings.Split(pickerView, "\n")
+		for _, line := range pickerLines {
+			styledLine := strings.ReplaceAll(line, " ", spacerStyle.Render(" "))
+			allLines = append(allLines, spacerStyle.Width(w).Render(styledLine))
+		}
+
+		maxWidth := 0
+		for _, line := range allLines {
+			lw := lipgloss.Width(line)
+			if lw > maxWidth {
+				maxWidth = lw
+			}
+		}
+
+		for i, line := range allLines {
+			allLines[i] = spacerStyle.Copy().Width(maxWidth).Render(line)
+		}
+
+		modal := modalStyle.Render(strings.Join(allLines, "\n"))
 
 		return lipgloss.Place(
 			m.Width, m.Height,
@@ -875,39 +949,87 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Ctrl+End", "File End"},
 	}
 
-	var leftCol strings.Builder
-	leftCol.WriteString(categoryStyle.Render("General"))
-	leftCol.WriteString("\n")
+	bg := helpStyle.GetBackground()
+	spacerStyle := lipgloss.NewStyle().Background(bg)
+
+	var leftColLines []string
+	leftColLines = append(leftColLines, categoryStyle.Render("General"))
 	for _, s := range generalShortcuts {
-		leftCol.WriteString(fmt.Sprintf("%-14s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
+		keyStr := keyStyle.Width(14).Render(s.Key)
+		descStr := descStyle.Render(s.Desc)
+		leftColLines = append(leftColLines, lipgloss.JoinHorizontal(lipgloss.Top, keyStr, descStr))
 	}
 
-	var rightCol strings.Builder
-	rightCol.WriteString(categoryStyle.Render("Navigation"))
-	rightCol.WriteString("\n")
+	var rightColLines []string
+	rightColLines = append(rightColLines, categoryStyle.Render("Navigation"))
 	for _, s := range navShortcuts {
-		rightCol.WriteString(fmt.Sprintf("%-18s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
+		keyStr := keyStyle.Width(18).Render(s.Key)
+		descStr := descStyle.Render(s.Desc)
+		rightColLines = append(rightColLines, lipgloss.JoinHorizontal(lipgloss.Top, keyStr, descStr))
 	}
 
-	leftColStyled := lipgloss.NewStyle().MarginRight(3).Render(leftCol.String())
-	rightColStyled := lipgloss.NewStyle().Render(rightCol.String())
+	maxLines := len(leftColLines)
+	if len(rightColLines) > maxLines {
+		maxLines = len(rightColLines)
+	}
+
+	for len(leftColLines) < maxLines {
+		leftColLines = append(leftColLines, spacerStyle.Render(""))
+	}
+	for len(rightColLines) < maxLines {
+		rightColLines = append(rightColLines, spacerStyle.Render(""))
+	}
+
+	leftColStyled := lipgloss.NewStyle().
+		PaddingRight(3).
+		Background(bg).
+		Render(strings.Join(leftColLines, "\n"))
+	rightColStyled := lipgloss.NewStyle().
+		Background(bg).
+		Render(strings.Join(rightColLines, "\n"))
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftColStyled, rightColStyled)
 
 	contentWidth := lipgloss.Width(columns)
 
 	title := "Larry - Help Menu"
-	centeredTitle := lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(helpTitleStyle.Render(title))
+	titleGap := contentWidth - lipgloss.Width(title)
+	titleLeft := titleGap / 2
+	titleRight := titleGap - titleLeft
+	paddedTitle := helpTitleStyle.Render(strings.Repeat(" ", titleLeft) + title + strings.Repeat(" ", titleRight))
+
 	footer := "Press Esc or Ctrl+h to close"
-	centeredFooter := lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(footerStyle.Render(footer))
+	footerGap := contentWidth - lipgloss.Width(footer)
+	footerLeft := footerGap / 2
+	footerRight := footerGap - footerLeft
+	paddedFooter := footerStyle.Render(strings.Repeat(" ", footerLeft) + footer + strings.Repeat(" ", footerRight))
 
 	var sb strings.Builder
-	sb.WriteString(centeredTitle)
+	sb.WriteString(paddedTitle)
+	sb.WriteString("\n")
+	sb.WriteString(spacerStyle.Render(strings.Repeat(" ", contentWidth)))
 	sb.WriteString("\n")
 	sb.WriteString(columns)
 	sb.WriteString("\n")
-	sb.WriteString(centeredFooter)
+	sb.WriteString(spacerStyle.Render(strings.Repeat(" ", contentWidth)))
+	sb.WriteString("\n")
+	sb.WriteString(paddedFooter)
 
-	helpMenu := helpStyle.Render(sb.String())
+	rawContent := sb.String()
+	lines := strings.Split(rawContent, "\n")
+
+	maxWidth := 0
+	for _, line := range lines {
+		lw := lipgloss.Width(line)
+		if lw > maxWidth {
+			maxWidth = lw
+		}
+	}
+
+	for i, line := range lines {
+		styledLine := strings.ReplaceAll(line, " ", spacerStyle.Render(" "))
+		lines[i] = spacerStyle.Width(maxWidth).Render(styledLine)
+	}
+	helpMenu := helpStyle.Render(strings.Join(lines, "\n"))
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, helpMenu)
 }
