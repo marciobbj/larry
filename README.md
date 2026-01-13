@@ -79,7 +79,7 @@ larry --help
 ```
 
 ## Key Bindings
-
+Leader key is ctrl by default.
 ### General
 | Action | Shortcut |
 |--------|----------|
@@ -87,7 +87,6 @@ larry --help
 | **Save** | `Leader+S` |
 | **Open File** | `Leader+O` |
 | **Search** | `Leader+F` |
-
 | **Global Larry Finder** | `Leader+P` |
 | **Undo** | `Leader+Z` |
 | **Redo** | `Leader+R` |
@@ -97,7 +96,6 @@ larry --help
 | **Go to Line** | `Leader+G` |
 | **Toggle Help** | `Leader+H` |
 | **Select All** | `Leader+A` |
-
 | **Indent** | `TAB` |
 | **Dedent** | `Shift+Tab` |
 
