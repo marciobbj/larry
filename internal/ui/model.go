@@ -107,6 +107,17 @@ var (
 
 	borderStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	statusBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Background(lipgloss.Color("235"))
+
+	modalStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("62")).
+			Padding(1, 2)
+
+	modalTitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("212")).
+			Bold(true).
+			MarginBottom(1).
+			Align(lipgloss.Center)
 )
 
 type OpType int
@@ -171,7 +182,7 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	fp := filepicker.New()
 	fp.AllowedTypes = nil // All files
 	fp.CurrentDirectory, _ = os.Getwd()
-	fp.Height = 10
+	fp.Height = 15
 	fp.ShowHidden = true
 	fp.Styles.Cursor = styleCursor
 	fp.Styles.Selected = styleSelected
@@ -712,16 +723,16 @@ func (m Model) View() string {
 		return fmt.Sprintf("%s\n\n%s", baseView, searchView)
 	}
 	if m.loading {
-		// Calculate empty lines to push picker to bottom
+		title := modalTitleStyle.Render("Open File")
 		pickerView := m.filePicker.View()
 
-		// Create a full-height string for the layout
+		content := lipgloss.JoinVertical(lipgloss.Left, title, pickerView)
+		modal := modalStyle.Render(content)
+
 		return lipgloss.Place(
 			m.Width, m.Height,
-			lipgloss.Left, lipgloss.Bottom,
-			pickerView,
-			lipgloss.WithWhitespaceChars(" "),
-			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")), // transparent/black
+			lipgloss.Center, lipgloss.Center,
+			modal,
 		)
 	}
 
