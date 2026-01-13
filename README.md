@@ -86,7 +86,7 @@ larry --help
 | **Open File** | `Ctrl+O` |
 | **Search** | `Ctrl+F` |
 | **Undo** | `Ctrl+Z` |
-| **Redo** (disabled)| `Ctrl+Shift+Z` |
+| **Redo** | `Ctrl+Shift+Z`, `Ctrl+R` |
 | **Copy** | `Ctrl+C` |
 | **Cut** | `Ctrl+X` |
 | **Paste** | `Ctrl+V` |

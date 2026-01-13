@@ -76,7 +76,7 @@ var DefaultKeyMap = KeyMap{
 	CursorRight:        key.NewBinding(key.WithKeys("right")),
 	Delete:             key.NewBinding(key.WithKeys("backspace", "delete")),
 	Undo:               key.NewBinding(key.WithKeys("ctrl+z")),
-	Redo:               key.NewBinding(key.WithKeys("ctrl+shift+z")),
+	Redo:               key.NewBinding(key.WithKeys("ctrl+shift+z", "ctrl+r")),
 	GoToLine:           key.NewBinding(key.WithKeys("ctrl+g")),
 	ToggleHelp:         key.NewBinding(key.WithKeys("ctrl+h")),
 	Search:             key.NewBinding(key.WithKeys("ctrl+f")),
@@ -802,7 +802,7 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Ctrl+f", "Search"},
 		{"Ctrl+h", "Toggle Help"},
 		{"Ctrl+z", "Undo"},
-		{"Ctrl+Shift+z", "Redo"},
+		{"Ctrl+R", "Redo"},
 		{"Ctrl+c", "Copy"},
 		{"Ctrl+v", "Paste"},
 		{"Ctrl+x", "Cut"},
@@ -1617,24 +1617,11 @@ func (m Model) undo() Model {
 	op := m.UndoStack[len(m.UndoStack)-1]
 	m.UndoStack = m.UndoStack[:len(m.UndoStack)-1]
 
-	// Inverse Operation
-	var inverseOp EditOp
-	inverseOp.Row = op.Row
-	inverseOp.Col = op.Col
-	inverseOp.Text = op.Text
-
 	switch op.Type {
 	case OpInsert:
-		// To undo insertion, we delete the inserted text
-		// We use `deleteSelection` logic manually or similar.
-		// Since `op.Text` can be multi-line or single line.
-		inverseOp.Type = OpDelete
-
-		// Setup selection to delete
 		m.startRow = op.Row
 		m.startCol = op.Col
 
-		// Calculate end position based on op.Text
 		lines := strings.Split(op.Text, "\n")
 		if len(lines) == 1 {
 			m.CursorRow = op.Row
@@ -1645,19 +1632,16 @@ func (m Model) undo() Model {
 		}
 
 		m.selecting = true
-		m = m.deleteSelectedText() // This modifies m.Lines
+		m = m.deleteSelectedText()
 		m.selecting = false
 
 	case OpDelete:
-		// To undo deletion, we insert the deleted text
-		inverseOp.Type = OpInsert
 		m.CursorRow = op.Row
 		m.CursorCol = op.Col
 		m = m.insertTextAtCursor(op.Text)
 	}
 
-	// Push to Redo
-	m.RedoStack = append(m.RedoStack, inverseOp)
+	m.RedoStack = append(m.RedoStack, op)
 	m.statusMsg = "Undid change"
 	return m
 }
@@ -1672,27 +1656,13 @@ func (m Model) redo() Model {
 	op := m.RedoStack[len(m.RedoStack)-1]
 	m.RedoStack = m.RedoStack[:len(m.RedoStack)-1]
 
-	// Apply Operation
-	// We need to push the *inverse of this* back to UndoStack?
-	// The `op` in RedoStack IS the operation to perform (it was the Inverse of the Undo).
-	// So if we perform it, we need to push ITS inverse to UndoStack.
-	// Actually, simpler: The Op in RedoStack is "Insert X" or "Delete X".
-	// We just execute it. And push it back to UndoStack.
-	// BUT `op` contains the info to DO it.
-
-	// Re-construct the Undo Op (which is the same as this Redo Op essentially)
-	undoOp := op
-
 	switch op.Type {
-	case OpInsert: // Redo an Insert (which was an Undo of Delete)
+	case OpInsert:
 		m.CursorRow = op.Row
 		m.CursorCol = op.Col
 		m = m.insertTextAtCursor(op.Text)
-		// UndoOp should be Delete
-		undoOp.Type = OpInsert // Wait. If we just Inserted, we want to Record "Inserted" so Undo can "Delete" it.
-		// Yes. `pushUndo` expects what we DID.
 
-	case OpDelete: // Redo a Delete (which was an Undo of Insert)
+	case OpDelete:
 		m.startRow = op.Row
 		m.startCol = op.Col
 		lines := strings.Split(op.Text, "\n")
@@ -1706,10 +1676,9 @@ func (m Model) redo() Model {
 		m.selecting = true
 		m = m.deleteSelectedText()
 		m.selecting = false
-		undoOp.Type = OpDelete
 	}
 
-	m.UndoStack = append(m.UndoStack, undoOp)
+	m.UndoStack = append(m.UndoStack, op)
 	m.statusMsg = "Redid change"
 	return m
 }
