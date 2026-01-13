@@ -675,13 +675,19 @@ func (m Model) View() string {
 		return m.viewHelpMenu(baseView)
 	}
 
+	leader := strings.Title(m.Config.LeaderKey)
+	if leader == "" {
+		leader = "Leader"
+	}
+
 	msg := m.statusMsg
 	if msg == "" {
 		if len(m.searchResults) > 0 {
-			msg = fmt.Sprintf("Search: %s (%d/%d) | Leader+h: Help | Leader+q: Quit | Leader+s: Save | Leader+f: Search File | Leader+p: Larry Finder",
-				m.searchQuery, m.currentResultIndex+1, len(m.searchResults))
+			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
+				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
 		} else {
-			msg = "Leader+o: Open File | Leader+h: Help | Leader+q: Quit | Leader+s: Save | Leader+f: Search File | Leader+p: Global Larry Finder"
+			msg = fmt.Sprintf("%s+o: Open File | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
+				leader, leader, leader, leader, leader, leader)
 		}
 	}
 

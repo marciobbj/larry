@@ -33,6 +33,16 @@ func LoadConfig(path string) (Config, error) {
 				path = defaultPath
 			}
 		}
+
+		if path == "" {
+			homeDir, err := os.UserHomeDir()
+			if err == nil {
+				fallbackPath := filepath.Join(homeDir, ".config", "larry", "config.json")
+				if _, err := os.Stat(fallbackPath); err == nil {
+					path = fallbackPath
+				}
+			}
+		}
 	}
 
 	if path == "" {

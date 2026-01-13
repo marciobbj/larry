@@ -17,7 +17,7 @@ A minimalist, high-performance TUI text editor written in Go.
     - File Loading/Saving using modern file picker
     - Very easy to use and navigate.
 - **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
-- **Global Finder**: Powerful multi-purpose search tool (`Ctrl+P`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
+- **Global Finder**: Powerful multi-purpose search tool (`Leader+P`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
 - **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
 - **UI**:
     - Clean, distraction-free interface
@@ -133,7 +133,7 @@ Larry includes an efficient text search feature powered by the **Boyer-Moore alg
 
 ### Global Finder
 
-The Global Finder is a powerful tool for navigating your project. Trigger it with `Ctrl+P`.
+The Global Finder is a powerful tool for navigating your project. Trigger it with `Leader+P`.
 
 - **Fuzzy Search**: Search for files by name with fuzzy matching.
 - **Live Grep**: Search for text patterns across all files in your project in real-time.
@@ -146,11 +146,12 @@ The Global Finder is a powerful tool for navigating your project. Trigger it wit
 Larry is designed to be easily customizable via a JSON configuration file. 
 
 ### Automatic Loading
-Larry automatically looks for and loads its configuration from the following default location if it exists:
-`~/.config/larry/config.json`
+Larry automatically looks for its configuration in the following locations:
+1.  **Standard**: `~/.config/larry/config.json` (on Linux) or `~/Library/Application Support/larry/config.json` (on macOS).
+2.  **Fallback**: `~/.config/larry/config.json` (common fallback for macOS users).
 
 ### Custom Configuration Override
-To use a different configuration file or override the default behavior, use the `-config` flag:
+To use a different configuration file, use the `-config` flag:
 
 ```bash
 larry -config path/to/your/config.json
@@ -170,7 +171,10 @@ larry -config path/to/your/config.json
 | `theme` | Syntax highlighting theme (e.g., `dracula`, `monokai`, `nord`, `github`) | `dracula` |
 | `tab_width` | Number of spaces for a tab character | `4` |
 | `line_numbers` | Show or hide line numbers | `true` |
-| `leader_key` | Base key for shortcuts (e.g., `ctrl`, `alt`, `cmd`). Use `cmd` for macOS. | `ctrl` |
+| `leader_key` | Base key for shortcuts (e.g., `ctrl`, `alt`). | `ctrl` |
+
+> **Note for macOS users**: The `cmd` key is generally not natively supported as a modifier by terminal emulators. We recommend setting `leader_key` to `alt` (which corresponds to the Option key) or mapping `cmd` to `ctrl` in your terminal's settings (e.g., iTerm2 or Ghostty).
+
 
 
 ## Roadmap
@@ -195,6 +199,6 @@ larry -config path/to/your/config.json
 - [x] Add Help Menu and Docs
 - [ ] Add to a remote package manager
 - [x] Improve resizing and responsiveness
-- [x] Agile navigation movements (Ctrl+arrows for word/line jumping)
+- [x] Agile navigation movements (Leader+arrows for word/line jumping)
 - [ ] Let Larry be more hackable, allowing users to add their own features, color schemes, etc
 - [ ] Debugger

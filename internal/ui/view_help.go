@@ -17,23 +17,28 @@ func (m Model) viewHelpMenu(base string) string {
 		height = 24
 	}
 
+	leader := strings.Title(m.Config.LeaderKey)
+	if leader == "" {
+		leader = "Leader"
+	}
+
 	generalShortcuts := []struct {
 		Key  string
 		Desc string
 	}{
-		{"Ctrl+q", "Quit"},
-		{"Ctrl+s", "Save"},
-		{"Ctrl+o", "Open File"},
-		{"Ctrl+g", "Go to Line"},
-		{"Ctrl+f", "Search"},
-		{"Ctrl+p", "Global Finder"},
-		{"Ctrl+h", "Toggle Help"},
-		{"Ctrl+z", "Undo"},
-		{"Ctrl+R", "Redo"},
-		{"Ctrl+c", "Copy"},
-		{"Ctrl+v", "Paste"},
-		{"Ctrl+x", "Cut"},
-		{"Ctrl+a", "Select All"},
+		{leader + "+q", "Quit"},
+		{leader + "+s", "Save"},
+		{leader + "+o", "Open File"},
+		{leader + "+g", "Go to Line"},
+		{leader + "+f", "Search"},
+		{leader + "+p", "Global Finder"},
+		{leader + "+h", "Toggle Help"},
+		{leader + "+z", "Undo"},
+		{leader + "+r", "Redo"},
+		{leader + "+c", "Copy"},
+		{leader + "+v", "Paste"},
+		{leader + "+x", "Cut"},
+		{leader + "+a", "Select All"},
 	}
 
 	navShortcuts := []struct {
@@ -42,15 +47,15 @@ func (m Model) viewHelpMenu(base string) string {
 	}{
 		{"←/→/↑/↓", "Move Cursor"},
 		{"Shift+Arrow", "Select Text"},
-		{"Ctrl+←/→", "Jump Word"},
-		{"Ctrl+↑/↓", "Jump 5 Lines"},
-		{"Ctrl+Shift+←/→", "Select Word"},
-		{"Ctrl+Shift+↑/↓", "Select Lines"},
+		{leader + "+←/→", "Jump Word"},
+		{leader + "+↑/↓", "Jump 5 Lines"},
+		{leader + "+Shift+←/→", "Select Word"},
+		{leader + "+Shift+↑/↓", "Select Lines"},
 		{"Home", "Line Start"},
 		{"End", "Line End"},
 		{"Shift+Home/End", "Select to Start/End"},
-		{"Ctrl+Home", "File Start"},
-		{"Ctrl+End", "File End"},
+		{leader + "+Home", "File Start"},
+		{leader + "+End", "File End"},
 	}
 
 	bg := helpStyle.GetBackground()
@@ -106,7 +111,7 @@ func (m Model) viewHelpMenu(base string) string {
 	titleRight := titleGap - titleLeft
 	paddedTitle := helpTitleStyle.Render(strings.Repeat(" ", titleLeft) + title + strings.Repeat(" ", titleRight))
 
-	footer := "Press Esc or Ctrl+h to close"
+	footer := "Press Esc or " + leader + "+h to close"
 	footerGap := contentWidth - lipgloss.Width(footer)
 	footerLeft := footerGap / 2
 	footerRight := footerGap - footerLeft
