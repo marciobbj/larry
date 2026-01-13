@@ -753,6 +753,14 @@ func (m Model) viewHelpMenu(base string) string {
 	width := m.Width
 	height := m.Height
 
+	// Ensure we have valid dimensions
+	if width <= 0 {
+		width = 80
+	}
+	if height <= 0 {
+		height = 24
+	}
+
 	// Define visual style for the help menu
 	helpStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -777,6 +785,10 @@ func (m Model) viewHelpMenu(base string) string {
 
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("248"))
+
+	footerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		MarginTop(1)
 
 	// Left column: General shortcuts
 	generalShortcuts := []struct {
@@ -836,16 +848,25 @@ func (m Model) viewHelpMenu(base string) string {
 	rightColStyled := lipgloss.NewStyle().Render(rightCol.String())
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftColStyled, rightColStyled)
 
-	// Build final menu
+	// Calculate content width for centering title
+	contentWidth := lipgloss.Width(columns)
+
+	// Build final menu with centered title
+	title := "Larry - Help Menu"
+	centeredTitle := lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(titleStyle.Render(title))
+	footer := "Press Esc or Ctrl+h to close"
+	centeredFooter := lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Center).Render(footerStyle.Render(footer))
+
 	var sb strings.Builder
-	sb.WriteString(titleStyle.Render("Larry - Help Menu"))
+	sb.WriteString(centeredTitle)
 	sb.WriteString("\n")
 	sb.WriteString(columns)
-	sb.WriteString("\nPress Esc or Ctrl+h to close")
+	sb.WriteString("\n")
+	sb.WriteString(centeredFooter)
 
 	helpMenu := helpStyle.Render(sb.String())
 
-	// Center the help menu
+	// Center the help menu on screen
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, helpMenu)
 }
 
