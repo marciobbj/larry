@@ -87,7 +87,7 @@ larry --help
 | **Save** | `Ctrl+S` |
 | **Open File** | `Ctrl+O` |
 | **Search** | `Ctrl+F` |
-| **Global Finder** | `Ctrl+P` |
+| **Global Larry Finder** | `Ctrl+P` |
 | **Undo** | `Ctrl+Z` |
 | **Redo** | `Ctrl+R` |
 | **Copy** | `Ctrl+C` |
