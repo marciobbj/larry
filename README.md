@@ -12,10 +12,10 @@ A minimalist, high-performance TUI text editor written in Go.
 
 - **Optimized File Loader**: Custom rendering engine optimizing performance for large files (O(1) input, O(H) rendering).
 - **Core Functionality**:
-    - Undo/Redo (`Ctrl+Z`)
-    - Clipboard Support (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`)
-    - Selection with Shift+Arrows
+    - Easy navigation with Larry Movements (more info in the key bindings section)
+    - Standard commands like copy, cut, paste, undo, redo, select all, etc. No need to learn new commands.
     - File Loading/Saving using modern file picker
+    - Very easy to use and navigate.
 - **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
 - **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
 - **UI**:
@@ -78,6 +78,7 @@ larry --help
 
 ## Key Bindings
 
+### General
 | Action | Shortcut |
 |--------|----------|
 | **Quit** | `Ctrl+Q` |
@@ -92,10 +93,28 @@ larry --help
 | **Go to Line** | `Ctrl+G` |
 | **Toggle Help** | `Ctrl+H` |
 | **Select All** | `Ctrl+A` |
-| **Select Text**| `Shift + Arrays` |
 | **Indent** | `TAB` |
 | **Dedent** | `Shift+Tab` |
-| **Navigation** | Arrow Keys |
+
+### Navigation
+| Action | Shortcut |
+|--------|----------|
+| **Move Cursor** | Arrow Keys |
+| **Jump Word Left/Right** | `Ctrl+←/→` |
+| **Jump 5 Lines Up/Down** | `Ctrl+↑/↓` |
+| **Line Start** | `Home` |
+| **Line End** | `End` |
+| **File Start** | `Ctrl+Home` |
+| **File End** | `Ctrl+End` |
+
+### Selection
+| Action | Shortcut |
+|--------|----------|
+| **Select Text** | `Shift+Arrow` |
+| **Select Word Left/Right** | `Ctrl+Shift+←/→` |
+| **Select 5 Lines Up/Down** | `Ctrl+Shift+↑/↓` |
+| **Select to Line Start** | `Shift+Home` |
+| **Select to Line End** | `Shift+End` |
 
 ## Search & Find
 
@@ -152,4 +171,4 @@ Run Larry with the `-config` flag:
 - [x] Add Help Menu and Docs
 - [ ] Add to a remote package manager
 - [ ] Improve resizing and responsiveness (add scaling etc)
-- [ ] Add some smart larry-movements like ctrl+down and ctrl+up to move cursor faster down and up - ctrl+left and ctrl+right to make the cursor to jump words
+- [x] Agile navigation movements (Ctrl+arrows for word/line jumping)

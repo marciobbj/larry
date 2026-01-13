@@ -115,3 +115,36 @@ func getStyleForToken(tokenType chroma.TokenType) lipgloss.Style {
 	lipglossCache.Store(tokenType, style)
 	return style
 }
+
+// GetSelectionStyle returns a lipgloss style for text selection based on the current theme
+func GetSelectionStyle() lipgloss.Style {
+	// Try to get a highlight/selected color from theme
+	// Use GenericStrong or fallback to a reasonable selection color
+	entry := theme.Get(chroma.GenericStrong)
+
+	style := lipgloss.NewStyle()
+
+	// If theme has a background for strong text, use it
+	if entry.Background.IsSet() {
+		style = style.Background(lipgloss.Color(entry.Background.String()))
+	} else {
+		// Fallback: use a muted version of the theme's background
+		// or a sensible default selection color
+		bgEntry := theme.Get(chroma.Background)
+		if bgEntry.Colour.IsSet() {
+			// Invert or use complementary color
+			style = style.Background(lipgloss.Color("239"))
+		} else {
+			style = style.Background(lipgloss.Color("239"))
+		}
+	}
+
+	// Use contrasting foreground
+	if entry.Colour.IsSet() {
+		style = style.Foreground(lipgloss.Color(entry.Colour.String()))
+	} else {
+		style = style.Foreground(lipgloss.Color("255"))
+	}
+
+	return style
+}

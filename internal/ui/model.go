@@ -41,6 +41,21 @@ type KeyMap struct {
 	GoToLine           key.Binding
 	ToggleHelp         key.Binding
 	Search             key.Binding
+	// Agile Navigation
+	JumpWordLeft      key.Binding
+	JumpWordRight     key.Binding
+	JumpLinesUp       key.Binding
+	JumpLinesDown     key.Binding
+	SelectWordLeft    key.Binding
+	SelectWordRight   key.Binding
+	SelectLinesUp     key.Binding
+	SelectLinesDown   key.Binding
+	LineStart         key.Binding
+	LineEnd           key.Binding
+	FileStart         key.Binding
+	FileEnd           key.Binding
+	SelectToLineStart key.Binding
+	SelectToLineEnd   key.Binding
 }
 
 var DefaultKeyMap = KeyMap{
@@ -65,6 +80,21 @@ var DefaultKeyMap = KeyMap{
 	GoToLine:           key.NewBinding(key.WithKeys("ctrl+g")),
 	ToggleHelp:         key.NewBinding(key.WithKeys("ctrl+h")),
 	Search:             key.NewBinding(key.WithKeys("ctrl+f")),
+	// Agile Navigation
+	JumpWordLeft:      key.NewBinding(key.WithKeys("ctrl+left")),
+	JumpWordRight:     key.NewBinding(key.WithKeys("ctrl+right")),
+	JumpLinesUp:       key.NewBinding(key.WithKeys("ctrl+up")),
+	JumpLinesDown:     key.NewBinding(key.WithKeys("ctrl+down")),
+	SelectWordLeft:    key.NewBinding(key.WithKeys("ctrl+shift+left")),
+	SelectWordRight:   key.NewBinding(key.WithKeys("ctrl+shift+right")),
+	SelectLinesUp:     key.NewBinding(key.WithKeys("ctrl+shift+up")),
+	SelectLinesDown:   key.NewBinding(key.WithKeys("ctrl+shift+down")),
+	LineStart:         key.NewBinding(key.WithKeys("home")),
+	LineEnd:           key.NewBinding(key.WithKeys("end")),
+	FileStart:         key.NewBinding(key.WithKeys("ctrl+home")),
+	FileEnd:           key.NewBinding(key.WithKeys("ctrl+end")),
+	SelectToLineStart: key.NewBinding(key.WithKeys("shift+home")),
+	SelectToLineEnd:   key.NewBinding(key.WithKeys("shift+end")),
 }
 
 var (
@@ -736,6 +766,11 @@ func (m Model) viewHelpMenu(base string) string {
 		Bold(true).
 		MarginBottom(1)
 
+	categoryStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("117")).
+		Bold(true).
+		MarginTop(1)
+
 	keyStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("154")).
 		Bold(true)
@@ -743,7 +778,8 @@ func (m Model) viewHelpMenu(base string) string {
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("248"))
 
-	shortcuts := []struct {
+	// Left column: General shortcuts
+	generalShortcuts := []struct {
 		Key  string
 		Desc string
 	}{
@@ -759,16 +795,52 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Ctrl+v", "Paste"},
 		{"Ctrl+x", "Cut"},
 		{"Ctrl+a", "Select All"},
-		{"Shift+Arrow", "Select Text"},
 	}
 
+	// Right column: Navigation shortcuts
+	navShortcuts := []struct {
+		Key  string
+		Desc string
+	}{
+		{"←/→/↑/↓", "Move Cursor"},
+		{"Shift+Arrow", "Select Text"},
+		{"Ctrl+←/→", "Jump Word"},
+		{"Ctrl+↑/↓", "Jump 5 Lines"},
+		{"Ctrl+Shift+←/→", "Select Word"},
+		{"Ctrl+Shift+↑/↓", "Select Lines"},
+		{"Home", "Line Start"},
+		{"End", "Line End"},
+		{"Shift+Home/End", "Select to Start/End"},
+		{"Ctrl+Home", "File Start"},
+		{"Ctrl+End", "File End"},
+	}
+
+	// Build left column
+	var leftCol strings.Builder
+	leftCol.WriteString(categoryStyle.Render("General"))
+	leftCol.WriteString("\n")
+	for _, s := range generalShortcuts {
+		leftCol.WriteString(fmt.Sprintf("%-14s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
+	}
+
+	// Build right column
+	var rightCol strings.Builder
+	rightCol.WriteString(categoryStyle.Render("Navigation"))
+	rightCol.WriteString("\n")
+	for _, s := range navShortcuts {
+		rightCol.WriteString(fmt.Sprintf("%-18s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
+	}
+
+	// Combine columns side by side
+	leftColStyled := lipgloss.NewStyle().MarginRight(3).Render(leftCol.String())
+	rightColStyled := lipgloss.NewStyle().Render(rightCol.String())
+	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftColStyled, rightColStyled)
+
+	// Build final menu
 	var sb strings.Builder
 	sb.WriteString(titleStyle.Render("Larry - Help Menu"))
 	sb.WriteString("\n")
-
-	for _, s := range shortcuts {
-		sb.WriteString(fmt.Sprintf("%-20s %s\n", keyStyle.Render(s.Key), descStyle.Render(s.Desc)))
-	}
+	sb.WriteString(columns)
 	sb.WriteString("\nPress Esc or Ctrl+h to close")
 
 	helpMenu := helpStyle.Render(sb.String())
@@ -949,6 +1021,88 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.CursorRow++
 			m.CursorCol = 0
 		}
+
+	// JUMP WORD RIGHT (Ctrl+Right)
+	case key.Matches(msg, m.KeyMap.JumpWordRight) || key.Matches(msg, m.KeyMap.SelectWordRight):
+		if key.Matches(msg, m.KeyMap.SelectWordRight) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		m.CursorRow, m.CursorCol = FindNextWordBoundary(m.Lines, m.CursorRow, m.CursorCol)
+
+	// JUMP WORD LEFT (Ctrl+Left)
+	case key.Matches(msg, m.KeyMap.JumpWordLeft) || key.Matches(msg, m.KeyMap.SelectWordLeft):
+		if key.Matches(msg, m.KeyMap.SelectWordLeft) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		m.CursorRow, m.CursorCol = FindPrevWordBoundary(m.Lines, m.CursorRow, m.CursorCol)
+
+	// JUMP LINES UP (Ctrl+Up)
+	case key.Matches(msg, m.KeyMap.JumpLinesUp) || key.Matches(msg, m.KeyMap.SelectLinesUp):
+		if key.Matches(msg, m.KeyMap.SelectLinesUp) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		m.CursorRow, m.CursorCol = JumpLinesUp(m.Lines, m.CursorRow, m.CursorCol)
+
+	// JUMP LINES DOWN (Ctrl+Down)
+	case key.Matches(msg, m.KeyMap.JumpLinesDown) || key.Matches(msg, m.KeyMap.SelectLinesDown):
+		if key.Matches(msg, m.KeyMap.SelectLinesDown) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		m.CursorRow, m.CursorCol = JumpLinesDown(m.Lines, m.CursorRow, m.CursorCol)
+
+	// HOME (Line Start)
+	case key.Matches(msg, m.KeyMap.LineStart) || key.Matches(msg, m.KeyMap.SelectToLineStart):
+		if key.Matches(msg, m.KeyMap.SelectToLineStart) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		m.CursorRow, m.CursorCol = MoveToLineStart(m.CursorRow, m.CursorCol)
+
+	// END (Line End)
+	case key.Matches(msg, m.KeyMap.LineEnd) || key.Matches(msg, m.KeyMap.SelectToLineEnd):
+		if key.Matches(msg, m.KeyMap.SelectToLineEnd) {
+			if !m.selecting {
+				m.selecting = true
+				m.startRow, m.startCol = m.CursorRow, m.CursorCol
+			}
+		} else {
+			m.selecting = false
+		}
+		m.CursorRow, m.CursorCol = MoveToLineEnd(m.Lines, m.CursorRow)
+
+	// FILE START (Ctrl+Home)
+	case key.Matches(msg, m.KeyMap.FileStart):
+		m.selecting = false
+		m.CursorRow, m.CursorCol = MoveToFileStart()
+
+	// FILE END (Ctrl+End)
+	case key.Matches(msg, m.KeyMap.FileEnd):
+		m.selecting = false
+		m.CursorRow, m.CursorCol = MoveToFileEnd(m.Lines)
 
 	// Typing (Chars) and Space
 	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
