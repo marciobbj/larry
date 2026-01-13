@@ -41,13 +41,17 @@ Larry offers a perfect balance for users who need more power than Nano without t
    ```bash
    go build ./cmd/larry
    ```
-5. Run:
+5. Also create the config file. If you are using macOS see "Note for macOS users" down below.
+   ```bash
+   touch ~/.config/larry/config.json && echo '{"theme": "monokai", "tab_width": 4, "line_numbers": true, "leader_key": "ctrl"}' > ~/.config/larry/config.json
+   ```
+6. Run:
    ```bash
    ./larry [OPTIONS] [FILE]
    ```
 
    Use `./larry --help` for detailed usage information.
-6. Add Larry to your PATH if you want:
+7. Add Larry to your PATH if you want:
    ```bash
    export PATH="<path_to_larry_bin/:$PATH"
    ```
