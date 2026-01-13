@@ -122,10 +122,7 @@ Larry includes an efficient text search feature powered by the **Boyer-Moore alg
 
 ### Search Features
 
-- **Case-Sensitive**: Searches exactly as typed
-- **Multi-Line Support**: Finds matches across all lines in the file
-- **Navigation**: Jump directly to any search result
-- **Persistent**: Search state remains active until you exit search mode
+- **FAST** like a cat.
 
 ## Configuration
 
