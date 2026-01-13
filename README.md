@@ -83,19 +83,21 @@ larry --help
 ### General
 | Action | Shortcut |
 |--------|----------|
-| **Quit** | `Ctrl+Q` |
-| **Save** | `Ctrl+S` |
-| **Open File** | `Ctrl+O` |
-| **Search** | `Ctrl+F` |
-| **Global Larry Finder** | `Ctrl+P` |
-| **Undo** | `Ctrl+Z` |
-| **Redo** | `Ctrl+R` |
-| **Copy** | `Ctrl+C` |
-| **Cut** | `Ctrl+X` |
-| **Paste** | `Ctrl+V` |
-| **Go to Line** | `Ctrl+G` |
-| **Toggle Help** | `Ctrl+H` |
-| **Select All** | `Ctrl+A` |
+| **Quit** | `Leader+Q` |
+| **Save** | `Leader+S` |
+| **Open File** | `Leader+O` |
+| **Search** | `Leader+F` |
+
+| **Global Larry Finder** | `Leader+P` |
+| **Undo** | `Leader+Z` |
+| **Redo** | `Leader+R` |
+| **Copy** | `Leader+C` |
+| **Cut** | `Leader+X` |
+| **Paste** | `Leader+V` |
+| **Go to Line** | `Leader+G` |
+| **Toggle Help** | `Leader+H` |
+| **Select All** | `Leader+A` |
+
 | **Indent** | `TAB` |
 | **Dedent** | `Shift+Tab` |
 
@@ -103,19 +105,21 @@ larry --help
 | Action | Shortcut |
 |--------|----------|
 | **Move Cursor** | Arrow Keys |
-| **Jump Word Left/Right** | `Ctrl+←/→` |
-| **Jump 5 Lines Up/Down** | `Ctrl+↑/↓` |
+| **Jump Word Left/Right** | `Leader+←/→` |
+| **Jump 5 Lines Up/Down** | `Leader+↑/↓` |
 | **Line Start** | `Home` |
 | **Line End** | `End` |
-| **File Start** | `Ctrl+Home` |
-| **File End** | `Ctrl+End` |
+| **File Start** | `Leader+Home` |
+| **File End** | `Leader+End` |
+
 
 ### Selection
 | Action | Shortcut |
 |--------|----------|
 | **Select Text** | `Shift+Arrow` |
-| **Select Word Left/Right** | `Ctrl+Shift+←/→` |
-| **Select 5 Lines Up/Down** | `Ctrl+Shift+↑/↓` |
+| **Select Word Left/Right** | `Leader+Shift+←/→` |
+| **Select 5 Lines Up/Down** | `Leader+Shift+↑/↓` |
+
 | **Select to Line Start** | `Shift+Home` |
 | **Select to Line End** | `Shift+End` |
 
@@ -157,7 +161,8 @@ larry -config path/to/your/config.json
 {
   "theme": "dracula",
   "tab_width": 4,
-  "line_numbers": true
+  "line_numbers": true,
+  "leader_key": "ctrl"
 }
 ```
 | Field | Description | Default |
@@ -165,6 +170,8 @@ larry -config path/to/your/config.json
 | `theme` | Syntax highlighting theme (e.g., `dracula`, `monokai`, `nord`, `github`) | `dracula` |
 | `tab_width` | Number of spaces for a tab character | `4` |
 | `line_numbers` | Show or hide line numbers | `true` |
+| `leader_key` | Base key for shortcuts (e.g., `ctrl`, `alt`, `cmd`). Use `cmd` for macOS. | `ctrl` |
+
 
 ## Roadmap
 
@@ -177,6 +184,7 @@ larry -config path/to/your/config.json
 - [x] Undo/redo functionality
 - [x] Search 
 - [x] Global Finder (Fuzzy & Live Grep)
+- [x] Leader Key config for cross-platform support
 - [ ] Replace
 - [x] Go to line
 - [ ] Markdown instant visualization

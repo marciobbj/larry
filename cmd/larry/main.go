@@ -102,12 +102,14 @@ CONFIGURATION:
     theme       - Syntax highlighting theme (e.g., "dracula", "monokai", "nord")
     tab_width   - Number of spaces for tab character (default: 4)
     line_numbers - Show/hide line numbers (default: true)
+    leader_key  - Base key for shortcuts (default: "ctrl", use "cmd" for macOS)
 
   Example config.json:
     {
       "theme": "dracula",
       "tab_width": 4,
-      "line_numbers": true
+      "line_numbers": true,
+      "leader_key": "ctrl"
     }
 
 For more information, see the README.md file.`)

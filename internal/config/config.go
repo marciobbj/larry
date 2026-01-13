@@ -10,6 +10,7 @@ type Config struct {
 	Theme       string `json:"theme"`
 	TabWidth    int    `json:"tab_width"`
 	LineNumbers bool   `json:"line_numbers"`
+	LeaderKey   string `json:"leader_key"`
 }
 
 func DefaultConfig() Config {
@@ -17,6 +18,7 @@ func DefaultConfig() Config {
 		Theme:       "dracula",
 		TabWidth:    4,
 		LineNumbers: true,
+		LeaderKey:   "ctrl",
 	}
 }
 

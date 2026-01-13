@@ -88,7 +88,7 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 		Width:              80,
 		Height:             20,
 		FileName:           filename,
-		KeyMap:             DefaultKeyMap,
+		KeyMap:             NewKeyMap(cfg.LeaderKey),
 		Quitting:           false,
 		startRow:           0,
 		startCol:           0,
@@ -678,10 +678,10 @@ func (m Model) View() string {
 	msg := m.statusMsg
 	if msg == "" {
 		if len(m.searchResults) > 0 {
-			msg = fmt.Sprintf("Search: %s (%d/%d) | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search File | Ctrl+p: Larry Finder",
+			msg = fmt.Sprintf("Search: %s (%d/%d) | Leader+h: Help | Leader+q: Quit | Leader+s: Save | Leader+f: Search File | Leader+p: Larry Finder",
 				m.searchQuery, m.currentResultIndex+1, len(m.searchResults))
 		} else {
-			msg = "Ctrl+o: Open File | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search File | Ctrl+p: Larry Finder"
+			msg = "Leader+o: Open File | Leader+h: Help | Leader+q: Quit | Leader+s: Save | Leader+f: Search File | Leader+p: Global Larry Finder"
 		}
 	}
 
