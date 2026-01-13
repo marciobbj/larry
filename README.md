@@ -170,7 +170,7 @@ larry -config path/to/your/config.json
 | `line_numbers` | Show or hide line numbers | `true` |
 | `leader_key` | Base key for shortcuts (e.g., `ctrl`, `alt`). | `ctrl` |
 
-> **Note for macOS users**: The `cmd` key is generally not natively supported as a modifier by terminal emulators. We recommend setting `leader_key` to `alt` (which corresponds to the Option key) or mapping `cmd` to `ctrl` in your terminal's settings (e.g., iTerm2 or Ghostty).
+> **Note for macOS users**: The `cmd` key is generally not natively supported as a modifier by terminal emulators. We recommend setting `leader_key` to `alt` (which corresponds to the Option key) by mapping `option` to `alt` in your terminal's settings (e.g., iTerm2, Ghostty, Kitty etc).
 
 
 
