@@ -172,3 +172,4 @@ Run Larry with the `-config` flag:
 - [ ] Add to a remote package manager
 - [ ] Improve resizing and responsiveness (add scaling etc)
 - [x] Agile navigation movements (Ctrl+arrows for word/line jumping)
+- [ ] Let Larry be more hackable, allowing users to add their own features, color schemes, etc
