@@ -64,7 +64,7 @@ var DefaultKeyMap = KeyMap{
 	GoToLine:           key.NewBinding(key.WithKeys("ctrl+g")),
 	ToggleHelp:         key.NewBinding(key.WithKeys("ctrl+h")),
 	Search:             key.NewBinding(key.WithKeys("ctrl+f")),
-	GlobalFinder:       key.NewBinding(key.WithKeys("ctrl+p", "ctrl+shift+f")),
+	GlobalFinder:       key.NewBinding(key.WithKeys("ctrl+p")),
 	// Agile Navigation
 	JumpWordLeft:      key.NewBinding(key.WithKeys("ctrl+left")),
 	JumpWordRight:     key.NewBinding(key.WithKeys("ctrl+right")),
