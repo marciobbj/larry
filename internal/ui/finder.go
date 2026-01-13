@@ -185,7 +185,7 @@ func (m FinderModel) View() string {
 			maxWidth = 10
 		}
 		if len(line) > maxWidth {
-			line = line[:maxWidth-3] + "..."
+			line = "..." + line[len(line)-(maxWidth-3):]
 		}
 
 		if i == m.cursor {
@@ -196,10 +196,17 @@ func (m FinderModel) View() string {
 		count++
 	}
 
-	if count == 0 && !m.loading {
-		resultsView.WriteString("\n  No results found.")
-	} else if m.loading {
-		resultsView.WriteString("\n  Searching...")
+	if len(m.results) == 0 && !m.loading {
+		resultsView.WriteString("  No results found.\n")
+		count++
+	} else if m.loading && len(m.results) == 0 {
+		resultsView.WriteString("  Searching...\n")
+		count++
+	}
+
+	for count < maxResults {
+		resultsView.WriteString("\n")
+		count++
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, "\n", resultsView.String())

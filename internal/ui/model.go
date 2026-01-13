@@ -289,6 +289,7 @@ type Model struct {
 	searchQuery        string
 	searchResults      []search.SearchMatch
 	currentResultIndex int
+	Modified           bool
 }
 
 func InitialModel(filename string, content string, cfg config.Config) Model {
@@ -350,6 +351,7 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 		searchQuery:        "",
 		searchResults:      nil,
 		currentResultIndex: -1,
+		Modified:           false,
 	}
 }
 
@@ -475,6 +477,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.TextArea.SetValue(string(content))
 						idx := getAbsoluteIndex(string(content), m.CursorRow, m.CursorCol)
 						m.TextArea.SetCursor(idx)
+						m.Modified = false
 					}
 					m.finding = false
 					return m, nil
@@ -501,6 +504,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.CursorCol = 0
 				m.yOffset = 0
 				m.selecting = false
+				m.Modified = false
 			}
 			m.loading = false
 			return m, cmd
@@ -530,6 +534,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.statusMsg = "Saved: " + filename
 					m.FileName = filename
+					m.Modified = false
 				}
 				m.saving = false
 				return m, nil
@@ -656,8 +661,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.TextArea.SetWidth(msg.Width)
 		m.TextArea.SetHeight(msg.Height - 1)
 
+		finderWidth := msg.Width
+		if finderWidth > 120 {
+			finderWidth = 120
+		}
+		finderHeight := msg.Height
+		if finderHeight > 25 {
+			finderHeight = 25
+		}
+
 		var finderCmd tea.Cmd
-		m.finder, finderCmd = m.finder.Update(msg)
+		m.finder, finderCmd = m.finder.Update(tea.WindowSizeMsg{Width: finderWidth, Height: finderHeight})
 
 		if len(m.Lines) <= m.TextArea.Height() {
 			m.yOffset = 0
@@ -890,10 +904,13 @@ func (m Model) View() string {
 	}
 	if m.finding {
 		finderView := m.finder.View()
-		w := lipgloss.Width(finderView)
+		w := m.Width
+		if w > 120 {
+			w = 120
+		}
 		h := lipgloss.Height(finderView)
 
-		maxW := m.Width - 4
+		maxW := m.Width - 8
 		maxH := m.Height - 4
 
 		if w > maxW {
@@ -996,12 +1013,23 @@ func (m Model) View() string {
 			msg = "Ctrl+o: Open File | Ctrl+h: Help | Ctrl+q: Quit | Ctrl+s: Save | Ctrl+f: Search File | Ctrl+p: Larry Finder"
 		}
 	}
+
+	fileStatus := m.FileName
+	if fileStatus == "" {
+		fileStatus = "[No Name]"
+	}
+	if m.Modified {
+		fileStatus += " [+]"
+	}
+
+	fullStatus := fmt.Sprintf(" %s │ %s", fileStatus, msg)
+
 	width := m.Width
 	if width < 20 {
 		width = 20
 	}
 
-	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(msg)
+	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
 	status := statusBarStyle.Width(width).Render(wrappedMsg)
 
 	return lipgloss.JoinVertical(lipgloss.Left, baseView, status)
@@ -1183,7 +1211,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case key.Matches(msg, m.KeyMap.GlobalFinder):
 		m.finding = true
-		m.finder = NewFinderModel(m.Width, m.Height)
+		finderWidth := m.Width
+		if finderWidth > 120 {
+			finderWidth = 120
+		}
+		finderHeight := m.Height
+		if finderHeight > 25 {
+			finderHeight = 25
+		}
+		m.finder = NewFinderModel(finderWidth, finderHeight)
 		return m, m.finder.performSearch()
 
 	case key.Matches(msg, m.KeyMap.Open):
@@ -1398,6 +1434,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.deleteSelectedText()
 		}
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
+			m.Modified = true
 			m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: string(msg.Runes)})
 
 			line := []rune(m.Lines[m.CursorRow])
@@ -1422,6 +1459,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
 			m = m.deleteSelectedText()
 		} else {
+			m.Modified = true
 			if m.CursorCol > 0 {
 				line := []rune(m.Lines[m.CursorRow])
 				deletedChar := string(line[m.CursorCol-1])
@@ -1471,6 +1509,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 
 			if spacesToRemove > 0 {
+				m.Modified = true
 				dedentText := line[:spacesToRemove]
 				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: 0, Text: dedentText})
 				m.Lines[m.CursorRow] = line[spacesToRemove:]
@@ -1489,6 +1528,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.deleteSelectedText()
 		}
 
+		m.Modified = true
 		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: "\n"})
 
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
@@ -1674,6 +1714,8 @@ func (m Model) deleteSelectedText() Model {
 		return m
 	}
 
+	m.Modified = true
+
 	startRow, startCol := m.startRow, m.startCol
 	endRow, endCol := m.CursorRow, m.CursorCol
 
@@ -1725,6 +1767,7 @@ func (m Model) insertTextAtCursor(text string) Model {
 		return m
 	}
 
+	m.Modified = true
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	linesToInsert := strings.Split(text, "\n")
