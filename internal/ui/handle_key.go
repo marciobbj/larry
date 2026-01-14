@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -383,5 +384,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.CursorCol = 0
 		}
 	}
+
+	content := strings.Join(m.Lines, "\n")
+	idx := getAbsoluteIndex(content, m.CursorRow, m.CursorCol)
+	m.TextArea.SetCursor(idx)
+
 	return m, cmd
 }

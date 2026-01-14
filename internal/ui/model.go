@@ -58,6 +58,7 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	ta.SetHeight(20)
 	ta.Placeholder = "Digite algo..."
 	ta.SetValue(content)
+	ta.SetCursor(0)
 	ta.Focus()
 
 	ti := textinput.New()
@@ -356,19 +357,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m = m.updateViewport()
+		m.yOffset = 0
 		return m, finderCmd
 	}
 
 	var taCmd tea.Cmd
 	if _, ok := msg.(tea.KeyMsg); !ok {
 		m.TextArea, taCmd = m.TextArea.Update(msg)
+		m.TextArea.SetCursor(0)
 	}
 
 	return m, taCmd
 }
 
 func (m Model) View() string {
+	leader := strings.Title(m.Config.LeaderKey)
+	if leader == "" {
+		leader = "Leader"
+	}
+
+	msg := m.statusMsg
+	if msg == "" {
+		if len(m.searchResults) > 0 {
+			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
+				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
+		} else {
+			msg = fmt.Sprintf("%s+o: Open File | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
+				leader, leader, leader, leader, leader, leader)
+		}
+	}
+
+	fileStatus := m.FileName
+	if fileStatus == "" {
+		fileStatus = "[No Name]"
+	}
+	if m.Modified {
+		fileStatus += " [+]"
+	}
+
+	fullStatus := fmt.Sprintf(" %s │ %s", fileStatus, msg)
+
+	width := m.Width
+	if width < 20 {
+		width = 20
+	}
+
+	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
+	status := statusBarStyle.Width(width).Render(wrappedMsg)
+	statusBarHeight := lipgloss.Height(status)
+
 	if m.Quitting {
 		return "Tchau!\n"
 	}
@@ -414,13 +451,13 @@ func (m Model) View() string {
 		lines := m.Lines
 		var s strings.Builder
 
-		maxVisualLines := m.TextArea.Height()
-		visualLinesRendered := 0
-		currentVisualLineIndex := 0
-
-		if m.searching {
+		maxVisualLines := m.Height - statusBarHeight
+		if m.searching || m.saving || m.goToLine {
 			maxVisualLines -= 2
 		}
+
+		visualLinesRendered := 0
+		currentVisualLineIndex := 0
 
 		for lineNum := 0; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 			line := lines[lineNum]
@@ -674,40 +711,6 @@ func (m Model) View() string {
 	if m.showHelp {
 		return m.viewHelpMenu(baseView)
 	}
-
-	leader := strings.Title(m.Config.LeaderKey)
-	if leader == "" {
-		leader = "Leader"
-	}
-
-	msg := m.statusMsg
-	if msg == "" {
-		if len(m.searchResults) > 0 {
-			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
-				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
-		} else {
-			msg = fmt.Sprintf("%s+o: Open File | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
-				leader, leader, leader, leader, leader, leader)
-		}
-	}
-
-	fileStatus := m.FileName
-	if fileStatus == "" {
-		fileStatus = "[No Name]"
-	}
-	if m.Modified {
-		fileStatus += " [+]"
-	}
-
-	fullStatus := fmt.Sprintf(" %s │ %s", fileStatus, msg)
-
-	width := m.Width
-	if width < 20 {
-		width = 20
-	}
-
-	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
-	status := statusBarStyle.Width(width).Render(wrappedMsg)
 
 	return lipgloss.JoinVertical(lipgloss.Left, baseView, status)
 }
