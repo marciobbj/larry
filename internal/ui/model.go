@@ -30,6 +30,7 @@ type Model struct {
 	loading            bool
 	goToLine           bool
 	searching          bool
+	replacing		   bool
 	finding            bool
 	finder             FinderModel
 	textInput          textinput.Model
@@ -44,6 +45,7 @@ type Model struct {
 	Config             config.Config
 	showHelp           bool
 	searchQuery        string
+	replaceQuery       string
 	searchResults      []search.SearchMatch
 	currentResultIndex int
 	Modified           bool
