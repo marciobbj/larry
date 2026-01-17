@@ -68,7 +68,7 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	ta.Focus()
 
 	ti := textinput.New()
-	ti.Placeholder = "filename.txt"
+	ti.Placeholder = "..."
 	ti.Prompt = "Filename: "
 	ti.CharLimit = 156
 	ti.Width = 20
