@@ -66,7 +66,7 @@ func NewKeyMap(leader string) KeyMap {
 		GoToLine:           key.NewBinding(key.WithKeys(leader + "+g")),
 		ToggleHelp:         key.NewBinding(key.WithKeys(leader + "+h")),
 		Search:             key.NewBinding(key.WithKeys(leader + "+f")),
-		Replace 			key.NewBinding(key.WithKeys(leader + "+t"))
+		Replace: 			key.NewBinding(key.WithKeys(leader + "+t")),
 		GlobalFinder:       key.NewBinding(key.WithKeys(leader + "+p")),
 		// Agile Navigation
 		JumpWordLeft:      key.NewBinding(key.WithKeys(leader + "+left")),

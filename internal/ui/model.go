@@ -30,7 +30,7 @@ type Model struct {
 	loading            bool
 	goToLine           bool
 	searching          bool
-	replacing		   bool
+	replacing          bool
 	finding            bool
 	finder             FinderModel
 	textInput          textinput.Model
@@ -46,8 +46,12 @@ type Model struct {
 	showHelp           bool
 	searchQuery        string
 	replaceQuery       string
+	replaceWith        string
+	replaceStep        int // 1: Find, 2: Replace with, 3: Replace loop
 	searchResults      []search.SearchMatch
+	replaceResults     []search.SearchMatch
 	currentResultIndex int
+	currReplaceIndex   int
 	Modified           bool
 }
 
@@ -106,11 +110,14 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 		Config:             cfg,
 		showHelp:           false,
 		searching:          false,
+		replacing:          false,
 		finding:            false,
 		finder:             NewFinderModel(80, 20),
+		replaceResults:     nil,
 		searchQuery:        "",
 		searchResults:      nil,
-		currentResultIndex: -1,
+		currentResultIndex: -1, // search
+		currReplaceIndex:   -1, // replace
 		Modified:           false,
 	}
 }
@@ -254,6 +261,98 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.replacing {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.replacing = false
+				m.replaceStep = 0
+				m.replaceQuery = ""
+				m.replaceWith = ""
+				m.replaceResults = nil
+				return m, nil
+			case tea.KeyEnter:
+				if m.replaceStep == 1 {
+					m.replaceQuery = m.textInput.Value()
+					if m.replaceQuery == "" {
+						m.replacing = false
+						return m, nil
+					}
+					m.replaceStep = 2
+					m.textInput.SetValue("")
+					m.textInput.Prompt = "With: "
+					return m, nil
+				} else if m.replaceStep == 2 {
+					m.replaceWith = m.textInput.Value()
+					searcher := search.NewBoyerMooreSearch(m.replaceQuery)
+					m.replaceResults = searcher.SearchInLines(m.Lines)
+					m.currReplaceIndex = -1
+					if len(m.replaceResults) > 0 {
+						m.replaceStep = 3
+						m.currReplaceIndex = 0
+						result := m.replaceResults[m.currReplaceIndex]
+						m.CursorRow = result.Line
+						m.CursorCol = result.Col
+						m = m.updateViewport()
+					} else {
+						m.statusMsg = "No matches found"
+						m.replacing = false
+					}
+					return m, nil
+				} else if m.replaceStep == 3 {
+					if m.currReplaceIndex >= 0 && m.currReplaceIndex < len(m.replaceResults) {
+						match := m.replaceResults[m.currReplaceIndex]
+
+						m.startRow, m.startCol = match.Line, match.Col
+						m.CursorRow, m.CursorCol = match.Line, match.Col+match.Length
+						m.selecting = true
+
+						m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: m.replaceQuery})
+						m = m.deleteSelectedText()
+						m.pushUndo(EditOp{Type: OpInsert, Row: m.startRow, Col: m.startCol, Text: m.replaceWith})
+						m = m.insertTextAtCursor(m.replaceWith)
+
+						searcher := search.NewBoyerMooreSearch(m.replaceQuery)
+						m.replaceResults = searcher.SearchInLines(m.Lines)
+
+						if len(m.replaceResults) > 0 {
+							if m.currReplaceIndex >= len(m.replaceResults) {
+								m.currReplaceIndex = 0
+							}
+							result := m.replaceResults[m.currReplaceIndex]
+							m.CursorRow = result.Line
+							m.CursorCol = result.Col
+							m = m.updateViewport()
+						} else {
+							m.statusMsg = "Done replacing"
+							m.replacing = false
+						}
+					}
+					return m, nil
+				}
+			}
+		}
+
+		if m.replaceStep == 1 {
+			query := m.textInput.Value()
+			if query != m.replaceQuery {
+				m.replaceQuery = query
+				if query != "" {
+					searcher := search.NewBoyerMooreSearch(query)
+					m.replaceResults = searcher.SearchInLines(m.Lines)
+				} else {
+					m.replaceResults = nil
+				}
+				m.currReplaceIndex = -1
+			}
+		}
+
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+
 	if m.searching {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -265,13 +364,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentResultIndex = -1
 				return m, nil
 			case tea.KeyEnter:
-				query := m.textInput.Value()
-				if query != "" && query != m.searchQuery {
-					m.searchQuery = query
-					searcher := search.NewBoyerMooreSearch(query)
-					m.searchResults = searcher.SearchInLines(m.Lines)
-					m.currentResultIndex = -1
-				}
 				if len(m.searchResults) > 0 {
 					m.currentResultIndex = (m.currentResultIndex + 1) % len(m.searchResults)
 					result := m.searchResults[m.currentResultIndex]
@@ -301,6 +393,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+
+		query := m.textInput.Value()
+		if query != m.searchQuery {
+			m.searchQuery = query
+			if query != "" {
+				searcher := search.NewBoyerMooreSearch(query)
+				m.searchResults = searcher.SearchInLines(m.Lines)
+			} else {
+				m.searchResults = nil
+			}
+			m.currentResultIndex = -1
+		}
+
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
 		return m, cmd
@@ -454,7 +559,7 @@ func (m Model) View() string {
 		var s strings.Builder
 
 		maxVisualLines := m.Height - statusBarHeight
-		if m.searching || m.saving || m.goToLine {
+		if m.searching || m.saving || m.goToLine || m.replacing {
 			maxVisualLines -= 2
 		}
 
@@ -498,6 +603,16 @@ func (m Model) View() string {
 
 					if len(m.searchResults) > 0 {
 						for _, result := range m.searchResults {
+							if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
+								style = styleSearch
+								applyStyle = true
+								break
+							}
+						}
+					}
+
+					if len(m.replaceResults) > 0 {
+						for _, result := range m.replaceResults {
 							if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
 								style = styleSearch
 								applyStyle = true
@@ -611,6 +726,16 @@ func (m Model) View() string {
 		}
 		searchView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
 		return fmt.Sprintf("%s\n\n%s", baseView, searchView)
+	}
+	if m.replacing {
+		var counter string
+		if len(m.replaceResults) > 0 {
+			counter = fmt.Sprintf(" (%d/%d)", m.currReplaceIndex+1, len(m.replaceResults))
+		} else if m.replaceQuery != "" && m.replaceStep >= 2 {
+			counter = " (no results)"
+		}
+		replaceView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
+		return fmt.Sprintf("%s\n\n%s", baseView, replaceView)
 	}
 	if m.finding {
 		finderView := m.finder.View()
