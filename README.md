@@ -91,6 +91,7 @@ Leader key is ctrl by default.
 | **Save** | `Leader+S` |
 | **Open File** | `Leader+O` |
 | **Search** | `Leader+F` |
+| **Replace** | `Leader+T` |
 | **Global Larry Finder** | `Leader+P` |
 | **Undo** | `Leader+Z` |
 | **Redo** | `Leader+R` |
@@ -190,8 +191,9 @@ larry -config path/to/your/config.json
 - [x] Search 
 - [x] Global Finder (Fuzzy & Live Grep)
 - [x] Leader Key config for cross-platform support
-- [ ] Replace
+- [x] Replace
 - [x] Go to line
+- [ ] Global Replace
 - [ ] Markdown instant visualization
 - [ ] LSP support
 - [x] Config file support
