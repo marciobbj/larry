@@ -41,9 +41,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case key.Matches(msg, m.KeyMap.Search):
 		m.searching = true
+		m.replacing = false
+		m.replaceResults = nil
 		m.textInput.Focus()
 		m.textInput.SetValue(m.searchQuery)
 		m.textInput.Prompt = "Search: "
+		return m, nil
+	case key.Matches(msg, m.KeyMap.Replace):
+		m.replacing = true
+		m.searching = false
+		m.searchResults = nil
+		m.replaceStep = 1
+		m.textInput.Focus()
+		m.textInput.SetValue(m.replaceQuery)
+		m.textInput.Prompt = "Find: "
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.GlobalFinder):
