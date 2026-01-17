@@ -327,7 +327,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				startRow, endRow = endRow, startRow
 			}
 
-			tab := "    "
+			tab := strings.Repeat(" ", m.Config.TabWidth)
 			for i := startRow; i <= endRow; i++ {
 				m.pushUndo(EditOp{Type: OpInsert, Row: i, Col: 0, Text: tab})
 				line := m.Lines[i]
@@ -338,7 +338,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		tab := "    "
+		tab := strings.Repeat(" ", m.Config.TabWidth)
 		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: tab})
 		m = m.insertTextAtCursor(tab)
 		return m, nil
@@ -356,7 +356,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				line := m.Lines[i]
 				spacesToRemove := 0
 				for j, r := range line {
-					if j >= 4 {
+					if j >= m.Config.TabWidth {
 						break
 					}
 					if r == ' ' {
@@ -390,7 +390,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			line := m.Lines[m.CursorRow]
 			spacesToRemove := 0
 			for i, r := range line {
-				if i >= 4 {
+				if i >= m.Config.TabWidth {
 					break
 				}
 				if r == ' ' {
