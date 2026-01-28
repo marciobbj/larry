@@ -451,9 +451,5 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	content := strings.Join(m.Lines, "\n")
-	idx := getAbsoluteIndex(content, m.CursorRow, m.CursorCol)
-	m.TextArea.SetCursor(idx)
-
 	return m, cmd
 }

@@ -10,14 +10,12 @@ import (
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type Model struct {
-	TextArea           textarea.Model
 	Width              int
 	Height             int
 	FileName           string
@@ -55,17 +53,9 @@ type Model struct {
 	Modified           bool
 }
 
-func InitialModel(filename string, content string, cfg config.Config) Model {
+func InitialModel(filename string, lines []string, cfg config.Config) Model {
 	SetTheme(cfg.Theme)
 	initStyles()
-
-	ta := textarea.New()
-	ta.SetWidth(80)
-	ta.SetHeight(20)
-	ta.Placeholder = "Digite algo..."
-	ta.SetValue(content)
-	ta.SetCursor(0)
-	ta.Focus()
 
 	ti := textinput.New()
 	ti.Placeholder = "..."
@@ -91,7 +81,6 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	fp.Styles.Selected = styleSelected
 
 	return Model{
-		TextArea:           ta,
 		Width:              80,
 		Height:             20,
 		FileName:           filename,
@@ -104,7 +93,7 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 		saving:             false,
 		loading:            false,
 		filePicker:         fp,
-		Lines:              strings.Split(content, "\n"),
+		Lines:              lines,
 		CursorRow:          0,
 		CursorCol:          0,
 		Config:             cfg,
@@ -155,9 +144,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.CursorRow = targetRow
 						m.CursorCol = 0
 						m = m.updateViewport()
-						m.TextArea.SetValue(string(content))
-						idx := getAbsoluteIndex(string(content), m.CursorRow, m.CursorCol)
-						m.TextArea.SetCursor(idx)
 						m.Modified = false
 					}
 					m.finding = false
@@ -370,10 +356,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.CursorRow = result.Line
 					m.CursorCol = result.Col
 
-					idx := getAbsoluteIndex(strings.Join(m.Lines, "\n"), m.CursorRow, m.CursorCol)
-					m.TextArea.SetCursor(idx)
-
-					textWidth := m.TextArea.Width()
+					textWidth := m.Width
 					if m.Config.LineNumbers {
 						textWidth -= 6
 					}
@@ -383,7 +366,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 					cursorVisualLine := m.getCursorVisualOffset(textWidth)
-					availableHeight := m.TextArea.Height() - 2
+					availableHeight := m.Height - 3
 					targetOffset := cursorVisualLine - (availableHeight / 2)
 					if targetOffset < 0 {
 						targetOffset = 0
@@ -437,8 +420,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		m.TextArea.SetWidth(msg.Width)
-		m.TextArea.SetHeight(msg.Height - 1)
 
 		finderWidth := msg.Width
 		if finderWidth > 120 {
@@ -452,10 +433,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var finderCmd tea.Cmd
 		m.finder, finderCmd = m.finder.Update(tea.WindowSizeMsg{Width: finderWidth, Height: finderHeight})
 
-		if len(m.Lines) <= m.TextArea.Height() {
+		if len(m.Lines) <= m.Height-1 {
 			m.yOffset = 0
 		} else {
-			maxOffset := len(m.Lines) - m.TextArea.Height()
+			maxOffset := len(m.Lines) - (m.Height - 1)
 			if m.yOffset > maxOffset {
 				m.yOffset = maxOffset
 			}
@@ -468,13 +449,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, finderCmd
 	}
 
-	var taCmd tea.Cmd
-	if _, ok := msg.(tea.KeyMsg); !ok {
-		m.TextArea, taCmd = m.TextArea.Update(msg)
-		m.TextArea.SetCursor(0)
-	}
-
-	return m, taCmd
+	return m, nil
 }
 
 func (m Model) View() string {
@@ -546,7 +521,7 @@ func (m Model) View() string {
 		cursorRow := m.CursorRow
 		cursorCol := m.CursorCol
 
-		textWidth := m.TextArea.Width()
+		textWidth := m.Width
 		if m.Config.LineNumbers {
 			textWidth -= 6
 		}
@@ -564,9 +539,10 @@ func (m Model) View() string {
 		}
 
 		visualLinesRendered := 0
-		currentVisualLineIndex := 0
 
-		for lineNum := 0; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
+		// Start rendering from m.yOffset (Logical Row Index)
+		// We iterate through lines starting from the first visible logical line.
+		for lineNum := m.yOffset; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 			line := lines[lineNum]
 			lineRunes := []rune(line)
 
@@ -574,10 +550,11 @@ func (m Model) View() string {
 				if visualLinesRendered >= maxVisualLines {
 					return
 				}
-				if currentVisualLineIndex < m.yOffset {
-					currentVisualLineIndex++
-					return
-				}
+
+				// No need to skip lines based on visual index anymore,
+				// since we start from the correct logical line.
+				// Exception: Partial scrolling of wrapped lines is not supported yet
+				// (we always snap to top of logical line), so this simplified logic is correct for O(1).
 
 				s.WriteString(borderStyle.Render("│"))
 				if m.Config.LineNumbers {
@@ -678,7 +655,6 @@ func (m Model) View() string {
 				if visualLinesRendered < maxVisualLines {
 					s.WriteString("\n")
 				}
-				currentVisualLineIndex++
 			}
 
 			if len(lineRunes) == 0 {
