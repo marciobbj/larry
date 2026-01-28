@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"larry/internal/config"
@@ -51,6 +53,8 @@ type Model struct {
 	currentResultIndex int
 	currReplaceIndex   int
 	Modified           bool
+	searchCancel       context.CancelFunc
+	replaceCancel      context.CancelFunc
 }
 
 func InitialModel(filename string, lines []string, cfg config.Config) Model {
@@ -272,7 +276,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if m.replaceStep == 2 {
 					m.replaceWith = m.textInput.Value()
 					searcher := search.NewBoyerMooreSearch(m.replaceQuery)
-					m.replaceResults = searcher.SearchInLines(m.Lines)
+					m.replaceResults = searcher.SearchInLines(context.Background(), m.Lines)
 					m.currReplaceIndex = -1
 					if len(m.replaceResults) > 0 {
 						m.replaceStep = 3
@@ -300,7 +304,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m = m.insertTextAtCursor(m.replaceWith)
 
 						searcher := search.NewBoyerMooreSearch(m.replaceQuery)
-						m.replaceResults = searcher.SearchInLines(m.Lines)
+						m.replaceResults = searcher.SearchInLines(context.Background(), m.Lines)
 
 						if len(m.replaceResults) > 0 {
 							if m.currReplaceIndex >= len(m.replaceResults) {
@@ -326,7 +330,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.replaceQuery = query
 				if query != "" {
 					searcher := search.NewBoyerMooreSearch(query)
-					m.replaceResults = searcher.SearchInLines(m.Lines)
+					m.replaceResults = searcher.SearchInLines(context.Background(), m.Lines)
 				} else {
 					m.replaceResults = nil
 				}
@@ -356,22 +360,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.CursorRow = result.Line
 					m.CursorCol = result.Col
 
-					textWidth := m.Width
-					if m.Config.LineNumbers {
-						textWidth -= 6
+					// Center the result in the viewport
+					viewportHeight := m.Height - 3 // Status bar etc
+					m.yOffset = m.CursorRow - (viewportHeight / 2)
+					if m.yOffset < 0 {
+						m.yOffset = 0
 					}
-					textWidth -= 1
-					if textWidth < 1 {
-						textWidth = 1
+					// Ensure m.yOffset is valid (redundant check but safe)
+					if m.yOffset >= len(m.Lines) {
+						m.yOffset = len(m.Lines) - 1
 					}
 
-					cursorVisualLine := m.getCursorVisualOffset(textWidth)
-					availableHeight := m.Height - 3
-					targetOffset := cursorVisualLine - (availableHeight / 2)
-					if targetOffset < 0 {
-						targetOffset = 0
-					}
-					m.yOffset = targetOffset
+					// We don't strictly need updateViewport here if we manually set yOffset correctly,
+					// but it handles bounds and bottom-clamping too.
+					// However, updateViewport might override our "center" preference
+					// if it thinks the cursor is visible "enough" (at the very bottom or top).
+					// So let's force the center first, then call updateViewport to fix edge cases.
+					m = m.updateViewport()
 				}
 				return m, nil
 			}
@@ -382,7 +387,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.searchQuery = query
 			if query != "" {
 				searcher := search.NewBoyerMooreSearch(query)
-				m.searchResults = searcher.SearchInLines(m.Lines)
+				m.searchResults = searcher.SearchInLines(context.Background(), m.Lines)
 			} else {
 				m.searchResults = nil
 			}
@@ -408,6 +413,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.finder, cmd = m.finder.Update(msg)
 		return m, cmd
+
+	case SearchResultsMsg:
+		if msg.IsReplace {
+			// Verify if the query matches current replaceQuery
+			// (User might have typed more since this search started)
+			if msg.Query != m.replaceQuery {
+				return m, nil
+			}
+			m.replaceResults = msg.Results
+			m.currReplaceIndex = -1
+			if len(m.replaceResults) > 0 {
+				m.replaceStep = 3
+				m.currReplaceIndex = 0
+				result := m.replaceResults[m.currReplaceIndex]
+				m.CursorRow = result.Line
+				m.CursorCol = result.Col
+				m = m.updateViewport()
+			} else {
+				// Only finish if we are in step 2 (waiting for search)
+				if m.replaceStep == 2 {
+					m.statusMsg = "No matches found"
+					// Stay in replace mode or exit?
+					// m.replacing = false // Maybe let them try another query
+				}
+			}
+		} else {
+			if msg.Query != m.searchQuery {
+				return m, nil
+			}
+			m.searchResults = msg.Results
+			m.currentResultIndex = -1
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
@@ -568,6 +607,32 @@ func (m Model) View() string {
 
 				syntaxStyles := GetLineStyles(m.Lines[lineNum], m.FileName)
 
+				// Helper to find matches for current line
+				findMatchesOnLine := func(allMatches []search.SearchMatch, lineNum int) []search.SearchMatch {
+					if len(allMatches) == 0 {
+						return nil
+					}
+					// Binary search for the first match on this line
+					idx := sort.Search(len(allMatches), func(i int) bool {
+						return allMatches[i].Line >= lineNum
+					})
+					if idx < len(allMatches) && allMatches[idx].Line == lineNum {
+						// Found matches, collect all for this line
+						var matches []search.SearchMatch
+						for i := idx; i < len(allMatches); i++ {
+							if allMatches[i].Line != lineNum {
+								break
+							}
+							matches = append(matches, allMatches[i])
+						}
+						return matches
+					}
+					return nil
+				}
+
+				lineSearchResults := findMatchesOnLine(m.searchResults, lineNum)
+				lineReplaceResults := findMatchesOnLine(m.replaceResults, lineNum)
+
 				for i := startIdx; i < endIdx; i++ {
 					ch := runes[i]
 					var style lipgloss.Style
@@ -578,9 +643,9 @@ func (m Model) View() string {
 						applyStyle = true
 					}
 
-					if len(m.searchResults) > 0 {
-						for _, result := range m.searchResults {
-							if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
+					if len(lineSearchResults) > 0 {
+						for _, result := range lineSearchResults {
+							if i >= result.Col && i < result.Col+result.Length {
 								style = styleSearch
 								applyStyle = true
 								break
@@ -588,9 +653,9 @@ func (m Model) View() string {
 						}
 					}
 
-					if len(m.replaceResults) > 0 {
-						for _, result := range m.replaceResults {
-							if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
+					if len(lineReplaceResults) > 0 {
+						for _, result := range lineReplaceResults {
+							if i >= result.Col && i < result.Col+result.Length {
 								style = styleSearch
 								applyStyle = true
 								break

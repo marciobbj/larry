@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"testing"
 )
 
@@ -13,7 +14,7 @@ func TestBoyerMooreSearch(t *testing.T) {
 		"test case here",
 	}
 
-	results := searcher.SearchInLines(lines)
+	results := searcher.SearchInLines(context.Background(), lines)
 	expected := []SearchMatch{
 		{Line: 0, Col: 10, Length: 4},
 		{Line: 2, Col: 0, Length: 4},
@@ -34,7 +35,7 @@ func TestBoyerMooreSearchNoResults(t *testing.T) {
 	searcher := NewBoyerMooreSearch("notfound")
 	lines := []string{"This is a test"}
 
-	results := searcher.SearchInLines(lines)
+	results := searcher.SearchInLines(context.Background(), lines)
 	if len(results) != 0 {
 		t.Errorf("Expected no results, got %d", len(results))
 	}
@@ -44,7 +45,7 @@ func TestBoyerMooreSearchEmptyPattern(t *testing.T) {
 	searcher := NewBoyerMooreSearch("")
 	lines := []string{"test"}
 
-	results := searcher.SearchInLines(lines)
+	results := searcher.SearchInLines(context.Background(), lines)
 	if len(results) != 0 {
 		t.Errorf("Expected no results for empty pattern, got %d", len(results))
 	}
@@ -54,7 +55,7 @@ func TestBoyerMooreSearchOverlapping(t *testing.T) {
 	searcher := NewBoyerMooreSearch("aa")
 	lines := []string{"aaaa"}
 
-	results := searcher.SearchInLines(lines)
+	results := searcher.SearchInLines(context.Background(), lines)
 	expected := []SearchMatch{
 		{Line: 0, Col: 0, Length: 2},
 		{Line: 0, Col: 2, Length: 2},
