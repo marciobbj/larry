@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -8,7 +9,20 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const minPreviewWidth = 20
+
+var ErrPreviewTooNarrow = errors.New("preview pane too narrow (minimum 20 chars)")
+
 func (m *Model) initMarkdownRenderer(width int) error {
+	if width < minPreviewWidth {
+		return ErrPreviewTooNarrow
+	}
+
+	wordWrap := width - 4
+	if wordWrap < 1 {
+		wordWrap = 1
+	}
+
 	styleCfg := styles.DarkStyleConfig
 	if !lipgloss.HasDarkBackground() {
 		styleCfg = styles.LightStyleConfig
@@ -34,7 +48,7 @@ func (m *Model) initMarkdownRenderer(width int) error {
 
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStyles(styleCfg),
-		glamour.WithWordWrap(width-4),
+		glamour.WithWordWrap(wordWrap),
 	)
 	if err != nil {
 		return err
