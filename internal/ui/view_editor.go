@@ -66,7 +66,7 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		line := lines[lineNum]
 		lineRunes := []rune(line)
 
-		renderChunk := func(runes []rune, startIdx, endIdx int, isFirst bool, currentLineVisualWidth int) {
+		renderChunk := func(runes []rune, startIdx, endIdx int, isFirst bool, _ int) {
 			if visualLinesRendered >= maxVisualLines {
 				return
 			}
