@@ -24,6 +24,7 @@ type KeyMap struct {
 	GoToLine           key.Binding
 	ToggleHelp         key.Binding
 	Search             key.Binding
+	Replace			   key.Binding	
 	GlobalFinder       key.Binding
 	// Agile Navigation
 	JumpWordLeft          key.Binding
@@ -62,10 +63,11 @@ func NewKeyMap(leader string) KeyMap {
 		CursorRight:        key.NewBinding(key.WithKeys("right")),
 		Delete:             key.NewBinding(key.WithKeys("backspace", "delete")),
 		Undo:               key.NewBinding(key.WithKeys(leader + "+z")),
-		Redo:               key.NewBinding(key.WithKeys(leader+"+shift+z", leader+"+r")),
+		Redo:               key.NewBinding(key.WithKeys(leader+"+r")),
 		GoToLine:           key.NewBinding(key.WithKeys(leader + "+g")),
 		ToggleHelp:         key.NewBinding(key.WithKeys(leader + "+h")),
 		Search:             key.NewBinding(key.WithKeys(leader + "+f")),
+		Replace: 			key.NewBinding(key.WithKeys(leader + "+t")),
 		GlobalFinder:       key.NewBinding(key.WithKeys(leader + "+p")),
 		// Agile Navigation
 		JumpWordLeft:          key.NewBinding(key.WithKeys(leader + "+left")),

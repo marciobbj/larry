@@ -179,15 +179,16 @@ func (lg *LiveGrep) Search(root, pattern string) ([]GrepResult, error) {
 		close(done)
 	}()
 
+	// can only process 10 files at a time, this saves memory and prevents race conditions
 	semaphore := make(chan struct{}, 10)
 
 	for _, file := range files {
 		wg.Add(1)
 		go func(filePath string) {
 			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
+			defer func() { <-semaphore }() // release execution
+			semaphore <- struct{}{} // start execution
+			
 			content, err := os.ReadFile(filePath)
 			if err != nil {
 				return

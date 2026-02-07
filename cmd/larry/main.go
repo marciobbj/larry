@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,15 +34,27 @@ func main() {
 
 	// Handle CLI arguments
 	filename := ""
-	content := ""
+	var lines []string
 	args := flag.Args()
 	if len(args) > 0 {
 		filename = args[0]
-		data, err := os.ReadFile(filename)
+		file, err := os.Open(filename)
 		if err == nil {
-			content = string(data)
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			// Increase buffer size to handle potential long lines (1MB)
+			const maxCapacity = 1024 * 1024
+			buf := make([]byte, maxCapacity)
+			scanner.Buffer(buf, maxCapacity)
+			for scanner.Scan() {
+				lines = append(lines, scanner.Text())
+			}
 		}
-		// If read fails (e.g. new file), we start with empty content and the filename
+		// If read fails (e.g. new file), we start with empty lines and the filename
+	}
+
+	if len(lines) == 0 {
+		lines = []string{""}
 	}
 
 	// Load configuration
@@ -55,7 +68,7 @@ func main() {
 	}
 
 	// Initialize the model
-	m := ui.InitialModel(filename, content, cfg)
+	m := ui.InitialModel(filename, lines, cfg)
 
 	// Create and run the Bubble Tea program
 	p := tea.NewProgram(m, tea.WithAltScreen()) // Use alternate screen for clean TUI

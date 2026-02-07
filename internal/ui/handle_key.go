@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -60,9 +61,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case key.Matches(msg, m.KeyMap.Search):
 		m.searching = true
+		m.replacing = false
+		m.replaceResults = nil
 		m.textInput.Focus()
 		m.textInput.SetValue(m.searchQuery)
 		m.textInput.Prompt = "Search: "
+		return m, nil
+	case key.Matches(msg, m.KeyMap.Replace):
+		m.replacing = true
+		m.searching = false
+		m.searchResults = nil
+		m.replaceStep = 1
+		m.textInput.Focus()
+		m.textInput.SetValue(m.replaceQuery)
+		m.textInput.Prompt = "Find: "
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.GlobalFinder):
@@ -339,22 +351,77 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case msg.Type == tea.KeyTab:
 		if m.selecting {
-			text := m.getSelectedText()
-			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
-			m = m.deleteSelectedText()
+			m.Modified = true
+			startRow, _ := m.startRow, m.startCol
+			endRow, _ := m.CursorRow, m.CursorCol
+			if startRow > endRow {
+				startRow, endRow = endRow, startRow
+			}
+
+			tab := strings.Repeat(" ", m.Config.TabWidth)
+			for i := startRow; i <= endRow; i++ {
+				m.pushUndo(EditOp{Type: OpInsert, Row: i, Col: 0, Text: tab})
+				line := m.Lines[i]
+				m.Lines[i] = tab + line
+			}
+			m.startCol += len(tab)
+			m.CursorCol += len(tab)
+			return m, nil
 		}
 
-		tab := "    "
+		tab := strings.Repeat(" ", m.Config.TabWidth)
 		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: tab})
 		m = m.insertTextAtCursor(tab)
 		return m, nil
 
 	case msg.Type == tea.KeyShiftTab:
+		if m.selecting {
+			m.Modified = true
+			startRow, _ := m.startRow, m.startCol
+			endRow, _ := m.CursorRow, m.CursorCol
+			if startRow > endRow {
+				startRow, endRow = endRow, startRow
+			}
+
+			for i := startRow; i <= endRow; i++ {
+				line := m.Lines[i]
+				spacesToRemove := 0
+				for j, r := range line {
+					if j >= m.Config.TabWidth {
+						break
+					}
+					if r == ' ' {
+						spacesToRemove++
+					} else {
+						break
+					}
+				}
+
+				if spacesToRemove > 0 {
+					dedentText := line[:spacesToRemove]
+					m.pushUndo(EditOp{Type: OpDelete, Row: i, Col: 0, Text: dedentText})
+					m.Lines[i] = line[spacesToRemove:]
+					if i == m.startRow {
+						m.startCol -= spacesToRemove
+						if m.startCol < 0 {
+							m.startCol = 0
+						}
+					}
+					if i == m.CursorRow {
+						m.CursorCol -= spacesToRemove
+						if m.CursorCol < 0 {
+							m.CursorCol = 0
+						}
+					}
+				}
+			}
+			return m, nil
+		}
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
 			line := m.Lines[m.CursorRow]
 			spacesToRemove := 0
 			for i, r := range line {
-				if i >= 4 {
+				if i >= m.Config.TabWidth {
 					break
 				}
 				if r == ' ' {
@@ -403,5 +470,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.CursorCol = 0
 		}
 	}
+
 	return m, cmd
 }

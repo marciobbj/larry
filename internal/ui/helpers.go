@@ -3,19 +3,7 @@ package ui
 import (
 	"log"
 	"os"
-	"strings"
-
-	"github.com/charmbracelet/bubbles/textarea"
 )
-
-func getCol(ta textarea.Model) int {
-	li := ta.LineInfo()
-	return li.StartColumn + li.CharOffset
-}
-
-func getRow(ta textarea.Model) int {
-	return ta.Line()
-}
 
 func Write(errorMessage string) {
 	f, err := os.OpenFile("larry.log", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
@@ -28,43 +16,6 @@ func Write(errorMessage string) {
 
 	log.SetOutput(f)
 	log.Println(errorMessage)
-}
-
-func getAbsoluteIndex(value string, row, col int) int {
-	if value == "" {
-		return 0
-	}
-
-	lines := strings.Split(value, "\n")
-
-	if row < 0 {
-		row = 0
-	}
-	if row >= len(lines) {
-		row = len(lines) - 1
-	}
-
-	runeIndex := 0
-	for i := 0; i < row; i++ {
-		runeIndex += len([]rune(lines[i])) + 1
-	}
-
-	lineRunes := []rune(lines[row])
-	if col < 0 {
-		col = 0
-	}
-	if col > len(lineRunes) {
-		col = len(lineRunes)
-	}
-
-	runeIndex += col
-
-	totalRunes := len([]rune(value))
-	if runeIndex > totalRunes {
-		runeIndex = totalRunes
-	}
-
-	return runeIndex
 }
 
 func (m Model) getVisualLineCount(lineNum int, textWidth int) int {
@@ -93,19 +44,16 @@ func (m Model) getVisualLineCount(lineNum int, textWidth int) int {
 	return count
 }
 
+// getCursorVisualOffset returns the visual line index of the cursor RELATIVE to the start of the current line.
+// To get absolute visual position relative to viewport top, we need to sum visual heights of lines between yOffset and CursorRow.
 func (m Model) getCursorVisualOffset(textWidth int) int {
-	totalVisualLines := 0
-	for i := 0; i < m.CursorRow; i++ {
-		totalVisualLines += m.getVisualLineCount(i, textWidth)
-	}
-
 	line := []rune(m.Lines[m.CursorRow])
 	currentLineVisualLine := 0
 	visualWidth := 0
 	for i := 0; i < m.CursorCol && i < len(line); i++ {
 		charWidth := 1
 		if line[i] == '\t' {
-			charWidth = 4
+			charWidth = m.Config.TabWidth
 		}
 		if visualWidth+charWidth > textWidth {
 			currentLineVisualLine++
@@ -114,8 +62,7 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 			visualWidth += charWidth
 		}
 	}
-
-	return totalVisualLines + currentLineVisualLine
+	return currentLineVisualLine
 }
 
 func (m Model) updateViewport() Model {
@@ -135,13 +82,62 @@ func (m Model) updateViewport() Model {
 		textWidth = 1
 	}
 
-	cursorVisualLine := m.getCursorVisualOffset(textWidth)
+	viewportHeight := m.Height - 2 // -2 for status bar and border
 
-	if cursorVisualLine < m.yOffset {
-		m.yOffset = cursorVisualLine
+	// 1. Ensure yOffset is within bounds [0, len(Lines)-1]
+	if m.yOffset < 0 {
+		m.yOffset = 0
+	}
+	if m.yOffset >= len(m.Lines) {
+		m.yOffset = len(m.Lines) - 1
+	}
+
+	// 2. If CursorRow is above yOffset, simply scroll up to CursorRow
+	if m.CursorRow < m.yOffset {
+		m.yOffset = m.CursorRow
 	}
 	if cursorVisualLine >= m.yOffset+viewportHeight {
 		m.yOffset = cursorVisualLine - viewportHeight + 1
 	}
+
+	for {
+		// Calculate visual height of the range [yOffset, CursorRow]
+		totalVisualHeight := 0
+
+		// Optimization: We only care if it EXCEEDS viewportHeight.
+		// We can stop summing once we pass it.
+		for i := m.yOffset; i < m.CursorRow; i++ {
+			totalVisualHeight += m.getVisualLineCount(i, textWidth)
+			if totalVisualHeight > viewportHeight {
+				break
+			}
+		}
+
+		// Add the cursor's visual offset within its own line
+		cursorVisualLine := m.getCursorVisualOffset(textWidth)
+
+		// The cursor is at `totalVisualHeight + cursorVisualLine` (0-indexed visual row relative to viewport top)
+		// We want this value to be < viewportHeight
+
+		cursorPosInViewport := totalVisualHeight + cursorVisualLine
+
+		if cursorPosInViewport < viewportHeight {
+			break // It fits!
+		}
+
+		// Doesn't fit, scroll down (increment yOffset)
+		m.yOffset++
+
+		// Safety break
+		if m.yOffset >= len(m.Lines) {
+			m.yOffset = len(m.Lines) - 1
+			break
+		}
+		if m.yOffset > m.CursorRow {
+			m.yOffset = m.CursorRow
+			break
+		}
+	}
+
 	return m
 }

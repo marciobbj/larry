@@ -41,13 +41,17 @@ Larry offers a perfect balance for users who need more power than Nano without t
    ```bash
    go build ./cmd/larry
    ```
-5. Run:
+5. Also create the config file. If you are using macOS see "Note for macOS users" down below.
+   ```bash
+   touch ~/.config/larry/config.json && echo '{"theme": "monokai", "tab_width": 4, "line_numbers": true, "leader_key": "ctrl"}' > ~/.config/larry/config.json
+   ```
+6. Run:
    ```bash
    ./larry [OPTIONS] [FILE]
    ```
 
    Use `./larry --help` for detailed usage information.
-6. Add Larry to your PATH if you want:
+7. Add Larry to your PATH if you want:
    ```bash
    export PATH="<path_to_larry_bin/:$PATH"
    ```
@@ -79,7 +83,7 @@ larry --help
 ```
 
 ## Key Bindings
-
+Leader key is ctrl by default.
 ### General
 | Action | Shortcut |
 |--------|----------|
@@ -87,7 +91,7 @@ larry --help
 | **Save** | `Leader+S` |
 | **Open File** | `Leader+O` |
 | **Search** | `Leader+F` |
-
+| **Replace** | `Leader+T` |
 | **Global Larry Finder** | `Leader+P` |
 | **Undo** | `Leader+Z` |
 | **Redo** | `Leader+R` |
@@ -97,7 +101,6 @@ larry --help
 | **Go to Line** | `Leader+G` |
 | **Toggle Help** | `Leader+H` |
 | **Select All** | `Leader+A` |
-
 | **Indent** | `TAB` |
 | **Dedent** | `Shift+Tab` |
 
@@ -119,7 +122,6 @@ larry --help
 | **Select Text** | `Shift+Arrow` |
 | **Select Word Left/Right** | `Leader+Shift+←/→` |
 | **Select 5 Lines Up/Down** | `Leader+Shift+↑/↓` |
-
 | **Select to Line Start** | `Shift+Home` |
 | **Select to Line End** | `Shift+End` |
 
@@ -173,7 +175,7 @@ larry -config path/to/your/config.json
 | `line_numbers` | Show or hide line numbers | `true` |
 | `leader_key` | Base key for shortcuts (e.g., `ctrl`, `alt`). | `ctrl` |
 
-> **Note for macOS users**: The `cmd` key is generally not natively supported as a modifier by terminal emulators. We recommend setting `leader_key` to `alt` (which corresponds to the Option key) or mapping `cmd` to `ctrl` in your terminal's settings (e.g., iTerm2 or Ghostty).
+> **Note for macOS users**: The `cmd` key is generally not natively supported as a modifier by terminal emulators. We recommend setting `leader_key` to `alt` (which corresponds to the Option key) by mapping `option` to `alt` in your terminal's settings (e.g., iTerm2, Ghostty, Kitty etc).
 
 
 
@@ -189,9 +191,10 @@ larry -config path/to/your/config.json
 - [x] Search 
 - [x] Global Finder (Fuzzy & Live Grep)
 - [x] Leader Key config for cross-platform support
-- [ ] Replace
+- [x] Replace
 - [x] Go to line
 - [x] Markdown instant visualization
+- [ ] Global Replace
 - [ ] LSP support
 - [x] Config file support
 - [ ] Plugin system

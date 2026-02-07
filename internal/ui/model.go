@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -26,7 +26,6 @@ const (
 )
 
 type Model struct {
-	TextArea           textarea.Model
 	Width              int
 	Height             int
 	FileName           string
@@ -39,6 +38,7 @@ type Model struct {
 	loading            bool
 	goToLine           bool
 	searching          bool
+	replacing          bool
 	finding            bool
 	finder             FinderModel
 	textInput          textinput.Model
@@ -53,8 +53,13 @@ type Model struct {
 	Config             config.Config
 	showHelp           bool
 	searchQuery        string
+	replaceQuery       string
+	replaceWith        string
+	replaceStep        int // 1: Find, 2: Replace with, 3: Replace loop
 	searchResults      []search.SearchMatch
+	replaceResults     []search.SearchMatch
 	currentResultIndex int
+	currReplaceIndex   int
 	Modified           bool
 	viewMode           ViewMode
 	markdownRenderer   *glamour.TermRenderer
@@ -67,19 +72,12 @@ func isMarkdownFile(filename string) bool {
 	return ext == ".md" || ext == ".markdown" || ext == ".mdown" || ext == ".mkd"
 }
 
-func InitialModel(filename string, content string, cfg config.Config) Model {
+func InitialModel(filename string, lines []string, cfg config.Config) Model {
 	SetTheme(cfg.Theme)
 	initStyles()
 
-	ta := textarea.New()
-	ta.SetWidth(80)
-	ta.SetHeight(20)
-	ta.Placeholder = "Digite algo..."
-	ta.SetValue(content)
-	ta.Focus()
-
 	ti := textinput.New()
-	ti.Placeholder = "filename.txt"
+	ti.Placeholder = "..."
 	ti.Prompt = "Filename: "
 	ti.CharLimit = 156
 	ti.Width = 20
@@ -102,7 +100,6 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 	fp.Styles.Selected = styleSelected
 
 	return Model{
-		TextArea:           ta,
 		Width:              80,
 		Height:             20,
 		FileName:           filename,
@@ -115,17 +112,20 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 		saving:             false,
 		loading:            false,
 		filePicker:         fp,
-		Lines:              strings.Split(content, "\n"),
+		Lines:              lines,
 		CursorRow:          0,
 		CursorCol:          0,
 		Config:             cfg,
 		showHelp:           false,
 		searching:          false,
+		replacing:          false,
 		finding:            false,
 		finder:             NewFinderModel(80, 20),
+		replaceResults:     nil,
 		searchQuery:        "",
 		searchResults:      nil,
-		currentResultIndex: -1,
+		currentResultIndex: -1, // search
+		currReplaceIndex:   -1, // replace
 		Modified:           false,
 		viewMode:           ViewModeEditor,
 		markdownRenderer:   nil,
@@ -165,9 +165,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.CursorRow = targetRow
 						m.CursorCol = 0
 						m = m.updateViewport()
-						m.TextArea.SetValue(string(content))
-						idx := getAbsoluteIndex(string(content), m.CursorRow, m.CursorCol)
-						m.TextArea.SetCursor(idx)
 						m.Modified = false
 					}
 					m.finding = false
@@ -273,6 +270,98 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.replacing {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.replacing = false
+				m.replaceStep = 0
+				m.replaceQuery = ""
+				m.replaceWith = ""
+				m.replaceResults = nil
+				return m, nil
+			case tea.KeyEnter:
+				if m.replaceStep == 1 {
+					m.replaceQuery = m.textInput.Value()
+					if m.replaceQuery == "" {
+						m.replacing = false
+						return m, nil
+					}
+					m.replaceStep = 2
+					m.textInput.SetValue("")
+					m.textInput.Prompt = "With: "
+					return m, nil
+				} else if m.replaceStep == 2 {
+					m.replaceWith = m.textInput.Value()
+					searcher := search.NewBoyerMooreSearch(m.replaceQuery)
+					m.replaceResults = searcher.SearchInLines(context.Background(), m.Lines)
+					m.currReplaceIndex = -1
+					if len(m.replaceResults) > 0 {
+						m.replaceStep = 3
+						m.currReplaceIndex = 0
+						result := m.replaceResults[m.currReplaceIndex]
+						m.CursorRow = result.Line
+						m.CursorCol = result.Col
+						m = m.updateViewport()
+					} else {
+						m.statusMsg = "No matches found"
+						m.replacing = false
+					}
+					return m, nil
+				} else if m.replaceStep == 3 {
+					if m.currReplaceIndex >= 0 && m.currReplaceIndex < len(m.replaceResults) {
+						match := m.replaceResults[m.currReplaceIndex]
+
+						m.startRow, m.startCol = match.Line, match.Col
+						m.CursorRow, m.CursorCol = match.Line, match.Col+match.Length
+						m.selecting = true
+
+						m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: m.replaceQuery})
+						m = m.deleteSelectedText()
+						m.pushUndo(EditOp{Type: OpInsert, Row: m.startRow, Col: m.startCol, Text: m.replaceWith})
+						m = m.insertTextAtCursor(m.replaceWith)
+
+						searcher := search.NewBoyerMooreSearch(m.replaceQuery)
+						m.replaceResults = searcher.SearchInLines(context.Background(), m.Lines)
+
+						if len(m.replaceResults) > 0 {
+							if m.currReplaceIndex >= len(m.replaceResults) {
+								m.currReplaceIndex = 0
+							}
+							result := m.replaceResults[m.currReplaceIndex]
+							m.CursorRow = result.Line
+							m.CursorCol = result.Col
+							m = m.updateViewport()
+						} else {
+							m.statusMsg = "Done replacing"
+							m.replacing = false
+						}
+					}
+					return m, nil
+				}
+			}
+		}
+
+		if m.replaceStep == 1 {
+			query := m.textInput.Value()
+			if query != m.replaceQuery {
+				m.replaceQuery = query
+				if query != "" {
+					searcher := search.NewBoyerMooreSearch(query)
+					m.replaceResults = searcher.SearchInLines(context.Background(), m.Lines)
+				} else {
+					m.replaceResults = nil
+				}
+				m.currReplaceIndex = -1
+			}
+		}
+
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+
 	if m.searching {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -284,42 +373,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentResultIndex = -1
 				return m, nil
 			case tea.KeyEnter:
-				query := m.textInput.Value()
-				if query != "" && query != m.searchQuery {
-					m.searchQuery = query
-					searcher := search.NewBoyerMooreSearch(query)
-					m.searchResults = searcher.SearchInLines(m.Lines)
-					m.currentResultIndex = -1
-				}
 				if len(m.searchResults) > 0 {
 					m.currentResultIndex = (m.currentResultIndex + 1) % len(m.searchResults)
 					result := m.searchResults[m.currentResultIndex]
 					m.CursorRow = result.Line
 					m.CursorCol = result.Col
 
-					idx := getAbsoluteIndex(strings.Join(m.Lines, "\n"), m.CursorRow, m.CursorCol)
-					m.TextArea.SetCursor(idx)
+					// Center the result in the viewport
+					viewportHeight := m.Height - 3 // Status bar etc
+					m.yOffset = m.CursorRow - (viewportHeight / 2)
+					if m.yOffset < 0 {
+						m.yOffset = 0
+					}
+					// Ensure m.yOffset is valid (redundant check but safe)
+					if m.yOffset >= len(m.Lines) {
+						m.yOffset = len(m.Lines) - 1
+					}
 
-					textWidth := m.TextArea.Width()
-					if m.Config.LineNumbers {
-						textWidth -= 6
-					}
-					textWidth -= 1
-					if textWidth < 1 {
-						textWidth = 1
-					}
-
-					cursorVisualLine := m.getCursorVisualOffset(textWidth)
-					availableHeight := m.TextArea.Height() - 2
-					targetOffset := cursorVisualLine - (availableHeight / 2)
-					if targetOffset < 0 {
-						targetOffset = 0
-					}
-					m.yOffset = targetOffset
+					// We don't strictly need updateViewport here if we manually set yOffset correctly,
+					// but it handles bounds and bottom-clamping too.
+					// However, updateViewport might override our "center" preference
+					// if it thinks the cursor is visible "enough" (at the very bottom or top).
+					// So let's force the center first, then call updateViewport to fix edge cases.
+					m = m.updateViewport()
 				}
 				return m, nil
 			}
 		}
+
+		query := m.textInput.Value()
+		if query != m.searchQuery {
+			m.searchQuery = query
+			if query != "" {
+				searcher := search.NewBoyerMooreSearch(query)
+				m.searchResults = searcher.SearchInLines(context.Background(), m.Lines)
+			} else {
+				m.searchResults = nil
+			}
+			m.currentResultIndex = -1
+		}
+
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
 		return m, cmd
@@ -339,6 +432,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.finder, cmd = m.finder.Update(msg)
 		return m, cmd
+
+	case SearchResultsMsg:
+		if msg.IsReplace {
+			// Verify if the query matches current replaceQuery
+			// (User might have typed more since this search started)
+			if msg.Query != m.replaceQuery {
+				return m, nil
+			}
+			m.replaceResults = msg.Results
+			m.currReplaceIndex = -1
+			if len(m.replaceResults) > 0 {
+				m.replaceStep = 3
+				m.currReplaceIndex = 0
+				result := m.replaceResults[m.currReplaceIndex]
+				m.CursorRow = result.Line
+				m.CursorCol = result.Col
+				m = m.updateViewport()
+			} else {
+				// Only finish if we are in step 2 (waiting for search)
+				if m.replaceStep == 2 {
+					m.statusMsg = "No matches found"
+					// Stay in replace mode or exit?
+					// m.replacing = false // Maybe let them try another query
+				}
+			}
+		} else {
+			if msg.Query != m.searchQuery {
+				return m, nil
+			}
+			m.searchResults = msg.Results
+			m.currentResultIndex = -1
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
@@ -351,8 +478,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		m.TextArea.SetWidth(msg.Width)
-		m.TextArea.SetHeight(msg.Height - 1)
 
 		if m.viewMode == ViewModeSplit {
 			previewWidth := msg.Width - msg.Width/2 - 1
@@ -377,10 +502,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var finderCmd tea.Cmd
 		m.finder, finderCmd = m.finder.Update(tea.WindowSizeMsg{Width: finderWidth, Height: finderHeight})
 
-		if len(m.Lines) <= m.TextArea.Height() {
+		if len(m.Lines) <= m.Height-1 {
 			m.yOffset = 0
 		} else {
-			maxOffset := len(m.Lines) - m.TextArea.Height()
+			maxOffset := len(m.Lines) - (m.Height - 1)
 			if m.yOffset > maxOffset {
 				m.yOffset = maxOffset
 			}
@@ -389,19 +514,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m = m.updateViewport()
+		m.yOffset = 0
 		return m, finderCmd
 	}
 
-	var taCmd tea.Cmd
-	if _, ok := msg.(tea.KeyMsg); !ok {
-		m.TextArea, taCmd = m.TextArea.Update(msg)
-	}
-
-	return m, taCmd
+	return m, nil
 }
 
 func (m Model) View() string {
+	leader := strings.Title(m.Config.LeaderKey)
+	if leader == "" {
+		leader = "Leader"
+	}
+
+	msg := m.statusMsg
+	if msg == "" {
+		if len(m.searchResults) > 0 {
+			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
+				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
+		} else {
+			msg = fmt.Sprintf("%s+o: Open File | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
+				leader, leader, leader, leader, leader, leader)
+		}
+	}
+
+	fileStatus := m.FileName
+	if fileStatus == "" {
+		fileStatus = "[No Name]"
+	}
+	if m.Modified {
+		fileStatus += " [+]"
+	}
+
+	fullStatus := fmt.Sprintf(" %s │ %s", fileStatus, msg)
+
+	width := m.Width
+	if width < 20 {
+		width = 20
+	}
+
+	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
+	status := statusBarStyle.Width(width).Render(wrappedMsg)
+	statusBarHeight := lipgloss.Height(status)
+
 	if m.Quitting {
 		return "Tchau!\n"
 	}
@@ -442,6 +597,16 @@ func (m Model) View() string {
 		}
 		searchView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
 		return fmt.Sprintf("%s\n\n%s", baseView, searchView)
+	}
+	if m.replacing {
+		var counter string
+		if len(m.replaceResults) > 0 {
+			counter = fmt.Sprintf(" (%d/%d)", m.currReplaceIndex+1, len(m.replaceResults))
+		} else if m.replaceQuery != "" && m.replaceStep >= 2 {
+			counter = " (no results)"
+		}
+		replaceView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
+		return fmt.Sprintf("%s\n\n%s", baseView, replaceView)
 	}
 	if m.finding {
 		finderView := m.finder.View()

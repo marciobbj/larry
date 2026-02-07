@@ -1,16 +1,20 @@
 // Package search provides efficient string searching algorithms for the text editor.
 package search
 
+import (
+	"context"
+)
+
 type SearchMatch struct {
-	Line   int 
-	Col    int 
-	Length int 
+	Line   int
+	Col    int
+	Length int
 }
 
 type BoyerMooreSearch struct {
 	pattern     string
 	patternLen  int
-	badCharSkip []int 
+	badCharSkip []int
 }
 
 func NewBoyerMooreSearch(pattern string) *BoyerMooreSearch {
@@ -80,15 +84,27 @@ func (bms *BoyerMooreSearch) SearchInText(text string) []SearchMatch {
 }
 
 // SearchInLines searches for the pattern in multiple lines and returns matches with line/column positions
-func (bms *BoyerMooreSearch) SearchInLines(lines []string) []SearchMatch {
+func (bms *BoyerMooreSearch) SearchInLines(ctx context.Context, lines []string) []SearchMatch {
 	if bms.patternLen == 0 {
 		return nil
 	}
 
 	var matches []SearchMatch
-	currentPos := 0
+	// Pre-allocate assuming sparse matches to avoid frequent resizing
+	matches = make([]SearchMatch, 0, 100)
+
+	// Check context every N lines to avoid overhead
+	const checkInterval = 1000
 
 	for lineIdx, line := range lines {
+		if lineIdx%checkInterval == 0 {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+		}
+
 		lineMatches := bms.SearchInText(line)
 		for _, match := range lineMatches {
 			matches = append(matches, SearchMatch{
@@ -97,7 +113,6 @@ func (bms *BoyerMooreSearch) SearchInLines(lines []string) []SearchMatch {
 				Length: match.Length,
 			})
 		}
-		currentPos += len(line) + 1 // +1 for newline
 	}
 
 	return matches
