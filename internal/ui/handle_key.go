@@ -17,11 +17,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if m.viewMode == ViewModeSplit {
 				m.viewMode = ViewModeEditor
 			} else {
-				m.viewMode = ViewModeSplit
-				if m.markdownRenderer == nil {
-					previewWidth := m.Width/2 - 1
-					m.initMarkdownRenderer(previewWidth)
+				previewWidth := m.Width/2 - 1
+				if previewWidth < 20 {
+					previewWidth = 20
 				}
+				if m.markdownRenderer == nil {
+					if err := m.initMarkdownRenderer(previewWidth); err != nil {
+						m.statusMsg = "Preview error: " + err.Error()
+						return m, nil
+					}
+				}
+				m.viewMode = ViewModeSplit
 			}
 		}
 		return m, nil

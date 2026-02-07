@@ -354,7 +354,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.viewMode == ViewModeSplit {
 			previewWidth := msg.Width/2 - 1
-			m.initMarkdownRenderer(previewWidth)
+			if previewWidth < 20 {
+				previewWidth = 20
+			}
+			if err := m.initMarkdownRenderer(previewWidth); err != nil {
+				m.viewMode = ViewModeEditor
+				m.statusMsg = "Preview error: " + err.Error()
+			}
 		}
 
 		finderWidth := msg.Width
