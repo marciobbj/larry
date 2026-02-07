@@ -66,7 +66,14 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 }
 
 func (m Model) updateViewport() Model {
-	textWidth := m.Width
+	textWidth := m.TextArea.Width()
+	viewportHeight := m.TextArea.Height()
+
+	if m.viewMode == ViewModeSplit {
+		textWidth = m.Width / 2
+		viewportHeight = m.Height - 1
+	}
+
 	if m.Config.LineNumbers {
 		textWidth -= 6
 	}
@@ -89,17 +96,8 @@ func (m Model) updateViewport() Model {
 	if m.CursorRow < m.yOffset {
 		m.yOffset = m.CursorRow
 	}
-
-	// 3. If CursorRow is below yOffset, we need to make sure it fits in the viewport.
-	// We might need to increment yOffset until the cursor is visible.
-	// Calculate total visual lines from yOffset to CursorRow
-
-	// Quick check: if CursorRow is WAY far down, jump closer first to avoid huge loop
-	if m.CursorRow > m.yOffset+viewportHeight {
-		m.yOffset = m.CursorRow - viewportHeight + 1
-		if m.yOffset < 0 {
-			m.yOffset = 0
-		}
+	if cursorVisualLine >= m.yOffset+viewportHeight {
+		m.yOffset = cursorVisualLine - viewportHeight + 1
 	}
 
 	for {

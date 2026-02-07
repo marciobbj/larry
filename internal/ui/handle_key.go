@@ -13,6 +13,26 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch {
+	case key.Matches(msg, m.KeyMap.ToggleMarkdownPreview):
+		if isMarkdownFile(m.FileName) {
+			if m.viewMode == ViewModeSplit {
+				m.viewMode = ViewModeEditor
+			} else {
+				previewWidth := m.Width - m.Width/2 - 1
+				if previewWidth < 20 {
+					previewWidth = 20
+				}
+				if m.markdownRenderer == nil {
+					if err := m.initMarkdownRenderer(previewWidth); err != nil {
+						m.statusMsg = "Preview error: " + err.Error()
+						return m, nil
+					}
+				}
+				m.viewMode = ViewModeSplit
+			}
+		}
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.ToggleHelp):
 		m.showHelp = !m.showHelp
 		return m, nil
@@ -282,7 +302,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.deleteSelectedText()
 		}
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
-			m.Modified = true
+			m.markModified()
 			m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: string(msg.Runes)})
 
 			line := []rune(m.Lines[m.CursorRow])
@@ -307,7 +327,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
 			m = m.deleteSelectedText()
 		} else {
-			m.Modified = true
+			m.markModified()
 			if m.CursorCol > 0 {
 				line := []rune(m.Lines[m.CursorRow])
 				deletedChar := string(line[m.CursorCol-1])
@@ -412,7 +432,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 
 			if spacesToRemove > 0 {
-				m.Modified = true
+				m.markModified()
 				dedentText := line[:spacesToRemove]
 				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: 0, Text: dedentText})
 				m.Lines[m.CursorRow] = line[spacesToRemove:]
@@ -431,7 +451,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.deleteSelectedText()
 		}
 
-		m.Modified = true
+		m.markModified()
 		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: "\n"})
 
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
