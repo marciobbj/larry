@@ -17,7 +17,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if m.viewMode == ViewModeSplit {
 				m.viewMode = ViewModeEditor
 			} else {
-				previewWidth := m.Width/2 - 1
+				previewWidth := m.Width - m.Width/2 - 1
 				if previewWidth < 20 {
 					previewWidth = 20
 				}

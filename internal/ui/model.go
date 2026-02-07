@@ -355,7 +355,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.TextArea.SetHeight(msg.Height - 1)
 
 		if m.viewMode == ViewModeSplit {
-			previewWidth := msg.Width/2 - 1
+			previewWidth := msg.Width - msg.Width/2 - 1
 			if previewWidth < 20 {
 				previewWidth = 20
 			}
