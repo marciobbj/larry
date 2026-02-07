@@ -58,6 +58,8 @@ type Model struct {
 	Modified           bool
 	viewMode           ViewMode
 	markdownRenderer   *glamour.TermRenderer
+	markdownCache      string
+	markdownCacheValid bool
 }
 
 func isMarkdownFile(filename string) bool {

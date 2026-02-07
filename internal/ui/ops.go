@@ -76,7 +76,7 @@ func (m Model) deleteSelectedText() Model {
 		return m
 	}
 
-	m.Modified = true
+	m.markModified()
 
 	startRow, startCol := m.startRow, m.startCol
 	endRow, endCol := m.CursorRow, m.CursorCol
@@ -129,7 +129,7 @@ func (m Model) insertTextAtCursor(text string) Model {
 		return m
 	}
 
-	m.Modified = true
+	m.markModified()
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	linesToInsert := strings.Split(text, "\n")
@@ -227,6 +227,11 @@ func (m Model) clipboardRead() (string, error) {
 func (m *Model) pushUndo(op EditOp) {
 	m.UndoStack = append(m.UndoStack, op)
 	m.RedoStack = nil
+}
+
+func (m *Model) markModified() {
+	m.Modified = true
+	m.markdownCacheValid = false
 }
 
 func (m Model) undo() Model {

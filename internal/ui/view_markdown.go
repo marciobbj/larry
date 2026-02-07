@@ -41,12 +41,21 @@ func (m *Model) initMarkdownRenderer(width int) error {
 	}
 
 	m.markdownRenderer = renderer
+	m.markdownCacheValid = false
 	return nil
 }
 
-func (m Model) viewMarkdownPreview(width, height int) string {
+func (m *Model) invalidateMarkdownCache() {
+	m.markdownCacheValid = false
+}
+
+func (m *Model) renderMarkdownCached() string {
+	if m.markdownCacheValid && m.markdownCache != "" {
+		return m.markdownCache
+	}
+
 	if m.markdownRenderer == nil {
-		return "Markdown renderer not initialized"
+		return ""
 	}
 
 	content := strings.Join(m.Lines, "\n")
@@ -57,6 +66,22 @@ func (m Model) viewMarkdownPreview(width, height int) string {
 
 	rendered = strings.TrimPrefix(rendered, "\n")
 	rendered = strings.TrimSuffix(rendered, "\n")
+
+	m.markdownCache = rendered
+	m.markdownCacheValid = true
+	return rendered
+}
+
+func (m *Model) viewMarkdownPreview(width, height int) string {
+	if m.markdownRenderer == nil {
+		return "Markdown renderer not initialized"
+	}
+
+	rendered := m.renderMarkdownCached()
+	if rendered == "" {
+		return "Empty document"
+	}
+
 	lines := strings.Split(rendered, "\n")
 
 	totalSourceLines := len(m.Lines)

@@ -290,7 +290,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.deleteSelectedText()
 		}
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
-			m.Modified = true
+			m.markModified()
 			m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: string(msg.Runes)})
 
 			line := []rune(m.Lines[m.CursorRow])
@@ -315,7 +315,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
 			m = m.deleteSelectedText()
 		} else {
-			m.Modified = true
+			m.markModified()
 			if m.CursorCol > 0 {
 				line := []rune(m.Lines[m.CursorRow])
 				deletedChar := string(line[m.CursorCol-1])
@@ -365,7 +365,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 
 			if spacesToRemove > 0 {
-				m.Modified = true
+				m.markModified()
 				dedentText := line[:spacesToRemove]
 				m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: 0, Text: dedentText})
 				m.Lines[m.CursorRow] = line[spacesToRemove:]
@@ -384,7 +384,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.deleteSelectedText()
 		}
 
-		m.Modified = true
+		m.markModified()
 		m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: "\n"})
 
 		if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) {
