@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"larry/internal/config"
@@ -13,7 +14,15 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+)
+
+type ViewMode int
+
+const (
+	ViewModeEditor ViewMode = iota
+	ViewModeSplit
 )
 
 type Model struct {
@@ -47,6 +56,13 @@ type Model struct {
 	searchResults      []search.SearchMatch
 	currentResultIndex int
 	Modified           bool
+	viewMode           ViewMode
+	markdownRenderer   *glamour.TermRenderer
+}
+
+func isMarkdownFile(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".md" || ext == ".markdown" || ext == ".mdown" || ext == ".mkd"
 }
 
 func InitialModel(filename string, content string, cfg config.Config) Model {
@@ -109,6 +125,8 @@ func InitialModel(filename string, content string, cfg config.Config) Model {
 		searchResults:      nil,
 		currentResultIndex: -1,
 		Modified:           false,
+		viewMode:           ViewModeEditor,
+		markdownRenderer:   nil,
 	}
 }
 
@@ -176,6 +194,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.yOffset = 0
 				m.selecting = false
 				m.Modified = false
+				m.viewMode = ViewModeEditor
+				m.markdownRenderer = nil
 			}
 			m.loading = false
 			return m, cmd
@@ -332,6 +352,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.TextArea.SetWidth(msg.Width)
 		m.TextArea.SetHeight(msg.Height - 1)
 
+		if m.viewMode == ViewModeSplit {
+			previewWidth := msg.Width/2 - 1
+			m.initMarkdownRenderer(previewWidth)
+		}
+
 		finderWidth := msg.Width
 		if finderWidth > 120 {
 			finderWidth = 120
@@ -375,186 +400,23 @@ func (m Model) View() string {
 
 	baseView := ""
 
-	if len(m.Lines) == 0 && !m.loading {
+	if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
+		baseView = m.viewSplit()
+	} else if len(m.Lines) == 0 && !m.loading {
 		s := strings.Builder{}
 		s.WriteString(borderStyle.Render("│"))
 		if m.Config.LineNumbers {
 			s.WriteString(lineNumStyle.Render("   1 "))
 		}
-		s.WriteString(styleCursor.Render(" ")) // Cursor
+		s.WriteString(styleCursor.Render(" "))
 		s.WriteString("\n")
 		baseView = s.String()
 	} else {
-		selStartRow, selStartCol := -1, -1
-		selEndRow, selEndCol := -1, -1
-
-		if m.selecting {
-			sRow, sCol := m.startRow, m.startCol
-			eRow, eCol := m.CursorRow, m.CursorCol
-
-			if sRow > eRow || (sRow == eRow && sCol > eCol) {
-				sRow, sCol, eRow, eCol = eRow, eCol, sRow, sCol
-			}
-			selStartRow, selStartCol = sRow, sCol
-			selEndRow, selEndCol = eRow, eCol
-		}
-
-		cursorRow := m.CursorRow
-		cursorCol := m.CursorCol
-
-		textWidth := m.TextArea.Width()
-		if m.Config.LineNumbers {
-			textWidth -= 6
-		}
-		textWidth -= 1 // Border
-		if textWidth < 1 {
-			textWidth = 1
-		}
-
-		lines := m.Lines
-		var s strings.Builder
-
-		maxVisualLines := m.TextArea.Height()
-		visualLinesRendered := 0
-		currentVisualLineIndex := 0
-
-		if m.searching {
-			maxVisualLines -= 2
-		}
-
-		for lineNum := 0; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
-			line := lines[lineNum]
-			lineRunes := []rune(line)
-
-			renderChunk := func(runes []rune, startIdx, endIdx int, isFirst bool, currentLineVisualWidth int) {
-				if visualLinesRendered >= maxVisualLines {
-					return
-				}
-				if currentVisualLineIndex < m.yOffset {
-					currentVisualLineIndex++
-					return
-				}
-
-				s.WriteString(borderStyle.Render("│"))
-				if m.Config.LineNumbers {
-					if isFirst {
-						ln := fmt.Sprintf(" %3d ", lineNum+1)
-						s.WriteString(lineNumStyle.Render(ln))
-					} else {
-						s.WriteString(lineNumStyle.Render("      "))
-					}
-				}
-
-				syntaxStyles := GetLineStyles(m.Lines[lineNum], m.FileName)
-
-				for i := startIdx; i < endIdx; i++ {
-					ch := runes[i]
-					var style lipgloss.Style
-					applyStyle := false
-
-					if i < len(syntaxStyles) {
-						style = syntaxStyles[i]
-						applyStyle = true
-					}
-
-					if len(m.searchResults) > 0 {
-						for _, result := range m.searchResults {
-							if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
-								style = styleSearch
-								applyStyle = true
-								break
-							}
-						}
-					}
-
-					if m.selecting {
-						isSelected := false
-						if lineNum > selStartRow && lineNum < selEndRow {
-							isSelected = true
-						} else if lineNum == selStartRow && lineNum == selEndRow {
-							if i >= selStartCol && i < selEndCol {
-								isSelected = true
-							}
-						} else if lineNum == selStartRow {
-							if i >= selStartCol {
-								isSelected = true
-							}
-						} else if lineNum == selEndRow {
-							if i < selEndCol {
-								isSelected = true
-							}
-						}
-						if isSelected {
-							style = styleSelected
-							applyStyle = true
-						}
-					}
-
-					if lineNum == cursorRow && i == cursorCol {
-						style = styleCursor
-						applyStyle = true
-					}
-
-					visualChar := string(ch)
-					if ch == '\t' {
-						visualChar = strings.Repeat(" ", m.Config.TabWidth)
-					}
-
-					if applyStyle {
-						if !m.selecting && lineNum == cursorRow && i == cursorCol {
-							if ch == '\t' {
-								s.WriteString(styleCursor.Render(" ") + strings.Repeat(" ", m.Config.TabWidth-1))
-							} else {
-								s.WriteString(styleCursor.Render(visualChar))
-							}
-						} else {
-							s.WriteString(style.Render(visualChar))
-						}
-					} else {
-						s.WriteString(visualChar)
-					}
-				}
-
-				if !m.selecting && lineNum == cursorRow && cursorCol == len(runes) && endIdx == len(runes) {
-					s.WriteString(styleCursor.Render(" "))
-				}
-
-				s.WriteString("\x1b[K")
-				visualLinesRendered++
-				if visualLinesRendered < maxVisualLines {
-					s.WriteString("\n")
-				}
-				currentVisualLineIndex++
-			}
-
-			if len(lineRunes) == 0 {
-				renderChunk(nil, 0, 0, true, 0)
-				continue
-			}
-
-			chunkStart := 0
-			currentVisualWidth := 0
-			isFirst := true
-			for i := 0; i < len(lineRunes); i++ {
-				charWidth := 1
-				if lineRunes[i] == '\t' {
-					charWidth = m.Config.TabWidth
-				}
-
-				if currentVisualWidth+charWidth > textWidth {
-					renderChunk(lineRunes, chunkStart, i, isFirst, currentVisualWidth)
-					chunkStart = i
-					currentVisualWidth = charWidth
-					isFirst = false
-				} else {
-					currentVisualWidth += charWidth
-				}
-			}
-			if chunkStart <= len(lineRunes) {
-				renderChunk(lineRunes, chunkStart, len(lineRunes), isFirst, currentVisualWidth)
-			}
-		}
-		baseView = s.String()
+		baseView = m.viewEditor(editorViewConfig{
+			width:        m.TextArea.Width(),
+			height:       m.TextArea.Height(),
+			showSearchUI: m.searching,
+		})
 	}
 
 	if m.saving {
@@ -685,6 +547,14 @@ func (m Model) View() string {
 		if len(m.searchResults) > 0 {
 			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
 				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
+		} else if isMarkdownFile(m.FileName) {
+			if m.viewMode == ViewModeSplit {
+				msg = fmt.Sprintf("%s+m: Close Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
+					leader, leader, leader, leader, leader)
+			} else {
+				msg = fmt.Sprintf("%s+m: Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
+					leader, leader, leader, leader, leader)
+			}
 		} else {
 			msg = fmt.Sprintf("%s+o: Open File | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
 				leader, leader, leader, leader, leader, leader)

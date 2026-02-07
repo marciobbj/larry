@@ -120,7 +120,14 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 
 func (m Model) updateViewport() Model {
 	textWidth := m.TextArea.Width()
-	if m.TextArea.ShowLineNumbers {
+	viewportHeight := m.TextArea.Height()
+
+	if m.viewMode == ViewModeSplit {
+		textWidth = m.Width / 2
+		viewportHeight = m.Height - 1
+	}
+
+	if m.Config.LineNumbers {
 		textWidth -= 6
 	}
 	textWidth -= 1
@@ -133,8 +140,8 @@ func (m Model) updateViewport() Model {
 	if cursorVisualLine < m.yOffset {
 		m.yOffset = cursorVisualLine
 	}
-	if cursorVisualLine >= m.yOffset+m.TextArea.Height() {
-		m.yOffset = cursorVisualLine - m.TextArea.Height() + 1
+	if cursorVisualLine >= m.yOffset+viewportHeight {
+		m.yOffset = cursorVisualLine - viewportHeight + 1
 	}
 	return m
 }

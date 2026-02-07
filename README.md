@@ -191,7 +191,7 @@ larry -config path/to/your/config.json
 - [x] Leader Key config for cross-platform support
 - [ ] Replace
 - [x] Go to line
-- [ ] Markdown instant visualization
+- [x] Markdown instant visualization
 - [ ] LSP support
 - [x] Config file support
 - [ ] Plugin system

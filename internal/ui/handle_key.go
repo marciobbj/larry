@@ -12,6 +12,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch {
+	case key.Matches(msg, m.KeyMap.ToggleMarkdownPreview):
+		if isMarkdownFile(m.FileName) {
+			if m.viewMode == ViewModeSplit {
+				m.viewMode = ViewModeEditor
+			} else {
+				m.viewMode = ViewModeSplit
+				if m.markdownRenderer == nil {
+					previewWidth := m.Width/2 - 1
+					m.initMarkdownRenderer(previewWidth)
+				}
+			}
+		}
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.ToggleHelp):
 		m.showHelp = !m.showHelp
 		return m, nil

@@ -26,20 +26,21 @@ type KeyMap struct {
 	Search             key.Binding
 	GlobalFinder       key.Binding
 	// Agile Navigation
-	JumpWordLeft      key.Binding
-	JumpWordRight     key.Binding
-	JumpLinesUp       key.Binding
-	JumpLinesDown     key.Binding
-	SelectWordLeft    key.Binding
-	SelectWordRight   key.Binding
-	SelectLinesUp     key.Binding
-	SelectLinesDown   key.Binding
-	LineStart         key.Binding
-	LineEnd           key.Binding
-	FileStart         key.Binding
-	FileEnd           key.Binding
-	SelectToLineStart key.Binding
-	SelectToLineEnd   key.Binding
+	JumpWordLeft          key.Binding
+	JumpWordRight         key.Binding
+	JumpLinesUp           key.Binding
+	JumpLinesDown         key.Binding
+	SelectWordLeft        key.Binding
+	SelectWordRight       key.Binding
+	SelectLinesUp         key.Binding
+	SelectLinesDown       key.Binding
+	LineStart             key.Binding
+	LineEnd               key.Binding
+	FileStart             key.Binding
+	FileEnd               key.Binding
+	SelectToLineStart     key.Binding
+	SelectToLineEnd       key.Binding
+	ToggleMarkdownPreview key.Binding
 }
 
 func NewKeyMap(leader string) KeyMap {
@@ -67,20 +68,21 @@ func NewKeyMap(leader string) KeyMap {
 		Search:             key.NewBinding(key.WithKeys(leader + "+f")),
 		GlobalFinder:       key.NewBinding(key.WithKeys(leader + "+p")),
 		// Agile Navigation
-		JumpWordLeft:      key.NewBinding(key.WithKeys(leader + "+left")),
-		JumpWordRight:     key.NewBinding(key.WithKeys(leader + "+right")),
-		JumpLinesUp:       key.NewBinding(key.WithKeys(leader + "+up")),
-		JumpLinesDown:     key.NewBinding(key.WithKeys(leader + "+down")),
-		SelectWordLeft:    key.NewBinding(key.WithKeys(leader + "+shift+left")),
-		SelectWordRight:   key.NewBinding(key.WithKeys(leader + "+shift+right")),
-		SelectLinesUp:     key.NewBinding(key.WithKeys(leader + "+shift+up")),
-		SelectLinesDown:   key.NewBinding(key.WithKeys(leader + "+shift+down")),
-		LineStart:         key.NewBinding(key.WithKeys("home")),
-		LineEnd:           key.NewBinding(key.WithKeys("end")),
-		FileStart:         key.NewBinding(key.WithKeys(leader + "+home")),
-		FileEnd:           key.NewBinding(key.WithKeys(leader + "+end")),
-		SelectToLineStart: key.NewBinding(key.WithKeys("shift+home")),
-		SelectToLineEnd:   key.NewBinding(key.WithKeys("shift+end")),
+		JumpWordLeft:          key.NewBinding(key.WithKeys(leader + "+left")),
+		JumpWordRight:         key.NewBinding(key.WithKeys(leader + "+right")),
+		JumpLinesUp:           key.NewBinding(key.WithKeys(leader + "+up")),
+		JumpLinesDown:         key.NewBinding(key.WithKeys(leader + "+down")),
+		SelectWordLeft:        key.NewBinding(key.WithKeys(leader + "+shift+left")),
+		SelectWordRight:       key.NewBinding(key.WithKeys(leader + "+shift+right")),
+		SelectLinesUp:         key.NewBinding(key.WithKeys(leader + "+shift+up")),
+		SelectLinesDown:       key.NewBinding(key.WithKeys(leader + "+shift+down")),
+		LineStart:             key.NewBinding(key.WithKeys("home")),
+		LineEnd:               key.NewBinding(key.WithKeys("end")),
+		FileStart:             key.NewBinding(key.WithKeys(leader + "+home")),
+		FileEnd:               key.NewBinding(key.WithKeys(leader + "+end")),
+		SelectToLineStart:     key.NewBinding(key.WithKeys("shift+home")),
+		SelectToLineEnd:       key.NewBinding(key.WithKeys("shift+end")),
+		ToggleMarkdownPreview: key.NewBinding(key.WithKeys(leader + "+m")),
 	}
 }
 
