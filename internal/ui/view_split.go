@@ -1,12 +1,13 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
 var splitDividerStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("240")).
-	SetString("│")
+	Foreground(lipgloss.Color("240"))
 
 func (m Model) viewSplit() string {
 	totalWidth := m.Width
@@ -23,11 +24,12 @@ func (m Model) viewSplit() string {
 
 	previewView := m.viewMarkdownPreview(previewWidth, totalHeight)
 
-	divider := ""
+	var dividerBuilder strings.Builder
+	dividerBuilder.Grow(totalHeight * 4)
 	for i := 0; i < totalHeight; i++ {
-		divider += splitDividerStyle.Render("│")
+		dividerBuilder.WriteString(splitDividerStyle.Render("│"))
 		if i < totalHeight-1 {
-			divider += "\n"
+			dividerBuilder.WriteByte('\n')
 		}
 	}
 
@@ -42,7 +44,7 @@ func (m Model) viewSplit() string {
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		editorStyle.Render(editorView),
-		divider,
+		dividerBuilder.String(),
 		previewStyle.Render(previewView),
 	)
 }
