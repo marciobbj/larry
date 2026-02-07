@@ -85,14 +85,28 @@ func (m *Model) viewMarkdownPreview(width, height int) string {
 	lines := strings.Split(rendered, "\n")
 
 	totalSourceLines := len(m.Lines)
-	if totalSourceLines == 0 {
-		totalSourceLines = 1
+	totalRenderedLines := len(lines)
+
+	var cursorPositionRatio float64
+	if totalSourceLines <= 1 {
+		cursorPositionRatio = 0.0
+	} else {
+		cursorPositionRatio = float64(m.CursorRow) / float64(totalSourceLines-1)
 	}
 
-	cursorPositionRatio := float64(m.CursorRow) / float64(totalSourceLines)
+	var targetLine int
+	if totalRenderedLines <= 1 {
+		targetLine = 0
+	} else {
+		targetLine = int(cursorPositionRatio * float64(totalRenderedLines-1))
+	}
 
-	totalRenderedLines := len(lines)
-	targetLine := int(cursorPositionRatio * float64(totalRenderedLines))
+	if targetLine < 0 {
+		targetLine = 0
+	}
+	if targetLine >= totalRenderedLines {
+		targetLine = totalRenderedLines - 1
+	}
 
 	maxLines := height - 1
 	if maxLines < 1 {
