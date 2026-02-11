@@ -479,14 +479,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 
-		if m.viewMode == ViewModeSplit {
+		// Always update markdown renderer if it exists or if we are in split mode
+		if m.viewMode == ViewModeSplit || m.markdownRenderer != nil {
 			previewWidth := msg.Width - msg.Width/2 - 1
 			if previewWidth < 20 {
 				previewWidth = 20
 			}
+			// Only re-init if width changed? Ideally yes, but for now just re-init to be safe.
+			// Actually initMarkdownRenderer is cheap enough? It creates a new glamour renderer.
 			if err := m.initMarkdownRenderer(previewWidth); err != nil {
-				m.viewMode = ViewModeEditor
-				m.statusMsg = "Preview error: " + err.Error()
+				if m.viewMode == ViewModeSplit {
+					m.viewMode = ViewModeEditor
+					m.statusMsg = "⚠️ Preview error: " + err.Error()
+				}
+				// If not in split mode, just clear the renderer so we try again later
+				m.markdownRenderer = nil
 			}
 		}
 
@@ -502,19 +509,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var finderCmd tea.Cmd
 		m.finder, finderCmd = m.finder.Update(tea.WindowSizeMsg{Width: finderWidth, Height: finderHeight})
 
-		if len(m.Lines) <= m.Height-1 {
-			m.yOffset = 0
-		} else {
-			maxOffset := len(m.Lines) - (m.Height - 1)
-			if m.yOffset > maxOffset {
-				m.yOffset = maxOffset
-			}
-			if m.yOffset < 0 {
-				m.yOffset = 0
-			}
-		}
+		m = m.updateViewport()
 
-		m.yOffset = 0
 		return m, finderCmd
 	}
 
@@ -555,7 +551,6 @@ func (m Model) View() string {
 
 	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
 	status := statusBarStyle.Width(width).Render(wrappedMsg)
-	statusBarHeight := lipgloss.Height(status)
 
 	if m.Quitting {
 		return "Tchau!\n"
@@ -575,9 +570,16 @@ func (m Model) View() string {
 		s.WriteString("\n")
 		baseView = s.String()
 	} else {
+		editorHeight := m.Height - 1
+		if m.saving || m.goToLine || m.searching || m.replacing {
+			editorHeight -= 2
+		}
+		if editorHeight < 1 {
+			editorHeight = 1
+		}
 		baseView = m.viewEditor(editorViewConfig{
-			width:        m.TextArea.Width(),
-			height:       m.TextArea.Height(),
+			width:        m.Width,
+			height:       editorHeight,
 			showSearchUI: m.searching,
 		})
 	}
@@ -710,22 +712,24 @@ func (m Model) View() string {
 		return m.viewHelpMenu(baseView)
 	}
 
-	leader := strings.Title(m.Config.LeaderKey)
+	leader = strings.Title(m.Config.LeaderKey)
+
 	if leader == "" {
 		leader = "Leader"
 	}
 
-	msg := m.statusMsg
+	msg = m.statusMsg
+
 	if msg == "" {
 		if len(m.searchResults) > 0 {
 			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
 				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
 		} else if isMarkdownFile(m.FileName) {
 			if m.viewMode == ViewModeSplit {
-				msg = fmt.Sprintf("%s+m: Close Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
+				msg = fmt.Sprintf("%s+u: Close Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
 					leader, leader, leader, leader, leader)
 			} else {
-				msg = fmt.Sprintf("%s+m: Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
+				msg = fmt.Sprintf("%s+u: Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
 					leader, leader, leader, leader, leader)
 			}
 		} else {
@@ -734,7 +738,7 @@ func (m Model) View() string {
 		}
 	}
 
-	fileStatus := m.FileName
+	fileStatus = m.FileName
 	if fileStatus == "" {
 		fileStatus = "[No Name]"
 	}
@@ -742,15 +746,15 @@ func (m Model) View() string {
 		fileStatus += " [+]"
 	}
 
-	fullStatus := fmt.Sprintf(" %s │ %s", fileStatus, msg)
+	fullStatus = fmt.Sprintf(" %s │ %s", fileStatus, msg)
 
-	width := m.Width
+	width = m.Width
 	if width < 20 {
 		width = 20
 	}
 
-	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
-	status := statusBarStyle.Width(width).Render(wrappedMsg)
+	wrappedMsg = lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
+	status = statusBarStyle.Width(width).Render(wrappedMsg)
 
 	return lipgloss.JoinVertical(lipgloss.Left, baseView, status)
 }

@@ -84,7 +84,7 @@ func NewKeyMap(leader string) KeyMap {
 		FileEnd:               key.NewBinding(key.WithKeys(leader + "+end")),
 		SelectToLineStart:     key.NewBinding(key.WithKeys("shift+home")),
 		SelectToLineEnd:       key.NewBinding(key.WithKeys("shift+end")),
-		ToggleMarkdownPreview: key.NewBinding(key.WithKeys(leader+"+m", leader+"+shift+m", "alt+m")),
+		ToggleMarkdownPreview: key.NewBinding(key.WithKeys(leader + "+u")),
 	}
 }
 

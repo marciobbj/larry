@@ -101,6 +101,7 @@ Leader key is ctrl by default.
 | **Go to Line** | `Leader+G` |
 | **Toggle Help** | `Leader+H` |
 | **Select All** | `Leader+A` |
+| **Markdown Preview** | `Leader+U` |
 | **Indent** | `TAB` |
 | **Dedent** | `Shift+Tab` |
 

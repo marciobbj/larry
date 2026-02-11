@@ -24,7 +24,9 @@ func (m *Model) initMarkdownRenderer(width int) error {
 	}
 
 	styleCfg := styles.DarkStyleConfig
-	if !lipgloss.HasDarkBackground() {
+	if m.Config.Theme == "github" || m.Config.Theme == "monokai-light" {
+		styleCfg = styles.LightStyleConfig
+	} else if !lipgloss.HasDarkBackground() && m.Config.Theme == "" {
 		styleCfg = styles.LightStyleConfig
 	}
 
@@ -88,7 +90,9 @@ func (m *Model) renderMarkdownCached() string {
 
 func (m *Model) viewMarkdownPreview(width, height int) string {
 	if m.markdownRenderer == nil {
-		return "Markdown renderer not initialized"
+		if err := m.initMarkdownRenderer(width); err != nil {
+			return "Error initializing markdown renderer: " + err.Error()
+		}
 	}
 
 	rendered := m.renderMarkdownCached()
