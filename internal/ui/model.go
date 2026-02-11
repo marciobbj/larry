@@ -490,7 +490,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err := m.initMarkdownRenderer(previewWidth); err != nil {
 				if m.viewMode == ViewModeSplit {
 					m.viewMode = ViewModeEditor
-					m.statusMsg = "⚠️ Preview error: " + err.Error()
+					m.statusMsg = "Preview error: " + err.Error()
 				}
 				// If not in split mode, just clear the renderer so we try again later
 				m.markdownRenderer = nil

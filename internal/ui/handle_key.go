@@ -24,7 +24,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 				if m.markdownRenderer == nil {
 					if err := m.initMarkdownRenderer(previewWidth); err != nil {
-						m.statusMsg = "⚠️ Preview error: " + err.Error()
+						m.statusMsg = "Preview error: " + err.Error()
 						return m, nil
 					}
 				}
