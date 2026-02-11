@@ -18,6 +18,10 @@ func Write(errorMessage string) {
 	log.Println(errorMessage)
 }
 
+func debugKeysEnabled() bool {
+	return os.Getenv("LARRY_DEBUG_KEYS") != ""
+}
+
 func (m Model) getVisualLineCount(lineNum int, textWidth int) int {
 	if lineNum < 0 || lineNum >= len(m.Lines) {
 		return 0
@@ -66,12 +70,19 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 }
 
 func (m Model) updateViewport() Model {
-	textWidth := m.TextArea.Width()
-	viewportHeight := m.TextArea.Height()
+	textWidth := m.Width
+	viewportHeight := m.Height - 1
 
 	if m.viewMode == ViewModeSplit {
 		textWidth = m.Width / 2
 		viewportHeight = m.Height - 1
+	}
+
+	if m.saving || m.goToLine || m.searching || m.replacing {
+		viewportHeight -= 2
+	}
+	if viewportHeight < 1 {
+		viewportHeight = 1
 	}
 
 	if m.Config.LineNumbers {
@@ -82,61 +93,38 @@ func (m Model) updateViewport() Model {
 		textWidth = 1
 	}
 
-	viewportHeight := m.Height - 2 // -2 for status bar and border
+	// Calculate absolute visual position of the cursor
+	cursorVisualAbsPos := 0
+	// 1. Sum visual height of all lines BEFORE CursorRow
+	for i := 0; i < m.CursorRow; i++ {
+		cursorVisualAbsPos += m.getVisualLineCount(i, textWidth)
+	}
+	// 2. Add cursor's visual offset within the current line
+	cursorVisualAbsPos += m.getCursorVisualOffset(textWidth)
 
-	// 1. Ensure yOffset is within bounds [0, len(Lines)-1]
+	// Adjust yOffset to keep cursor in view
+	// yOffset represents the absolute visual line index at the top of the viewport
+
+	// If cursor is above the viewport, scroll up
+	if cursorVisualAbsPos < m.yOffset {
+		m.yOffset = cursorVisualAbsPos
+	}
+
+	// If cursor is below the viewport, scroll down
+	// Visible range is [yOffset, yOffset + viewportHeight)
+	// So we need: cursorVisualAbsPos < yOffset + viewportHeight
+	// => yOffset > cursorVisualAbsPos - viewportHeight
+	if cursorVisualAbsPos >= m.yOffset+viewportHeight {
+		m.yOffset = cursorVisualAbsPos - viewportHeight + 1
+	}
+
+	// Ensure yOffset is not negative
 	if m.yOffset < 0 {
 		m.yOffset = 0
 	}
-	if m.yOffset >= len(m.Lines) {
-		m.yOffset = len(m.Lines) - 1
-	}
 
-	// 2. If CursorRow is above yOffset, simply scroll up to CursorRow
-	if m.CursorRow < m.yOffset {
-		m.yOffset = m.CursorRow
-	}
-	if cursorVisualLine >= m.yOffset+viewportHeight {
-		m.yOffset = cursorVisualLine - viewportHeight + 1
-	}
-
-	for {
-		// Calculate visual height of the range [yOffset, CursorRow]
-		totalVisualHeight := 0
-
-		// Optimization: We only care if it EXCEEDS viewportHeight.
-		// We can stop summing once we pass it.
-		for i := m.yOffset; i < m.CursorRow; i++ {
-			totalVisualHeight += m.getVisualLineCount(i, textWidth)
-			if totalVisualHeight > viewportHeight {
-				break
-			}
-		}
-
-		// Add the cursor's visual offset within its own line
-		cursorVisualLine := m.getCursorVisualOffset(textWidth)
-
-		// The cursor is at `totalVisualHeight + cursorVisualLine` (0-indexed visual row relative to viewport top)
-		// We want this value to be < viewportHeight
-
-		cursorPosInViewport := totalVisualHeight + cursorVisualLine
-
-		if cursorPosInViewport < viewportHeight {
-			break // It fits!
-		}
-
-		// Doesn't fit, scroll down (increment yOffset)
-		m.yOffset++
-
-		// Safety break
-		if m.yOffset >= len(m.Lines) {
-			m.yOffset = len(m.Lines) - 1
-			break
-		}
-		if m.yOffset > m.CursorRow {
-			m.yOffset = m.CursorRow
-			break
-		}
+	if m.CursorRow == 0 {
+		m.yOffset = 0
 	}
 
 	return m
