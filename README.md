@@ -194,6 +194,7 @@ larry -config path/to/your/config.json
 - [x] Replace
 - [x] Go to line
 - [x] Markdown instant visualization
+- [ ] Show modified lines with git integration
 - [ ] Global Replace
 - [ ] LSP support
 - [x] Config file support
