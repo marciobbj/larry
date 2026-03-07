@@ -28,7 +28,7 @@ func (m Model) viewHelpMenu(base string) string {
 	}{
 		{leader + "+q", "Quit"},
 		{leader + "+s", "Save"},
-		{leader + "+o", "Open File"},
+		{leader + "+o", "Open File (Local)"},
 		{leader + "+g", "Go to Line"},
 		{leader + "+f", "Search"},
 		{leader + "+t", "Replace"},
