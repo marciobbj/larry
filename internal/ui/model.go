@@ -524,43 +524,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	leader := strings.Title(m.Config.LeaderKey)
-	if leader == "" {
-		leader = "Leader"
-	}
-
-	msg := m.statusMsg
-	if msg == "" {
-		if len(m.searchResults) > 0 {
-			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
-				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
-		} else {
-			msg = fmt.Sprintf("%s+o: Open File | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
-				leader, leader, leader, leader, leader, leader)
-		}
-	}
-
-	fileStatus := m.FileName
-	if fileStatus == "" {
-		fileStatus = "[No Name]"
-	}
-	if m.Modified {
-		fileStatus += " [+]"
-	}
-
-	fullStatus := fmt.Sprintf(" %s │ %s", fileStatus, msg)
-
-	width := m.Width
-	if width < 20 {
-		width = 20
-	}
-
-	wrappedMsg := lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
-	status := statusBarStyle.Width(width).Render(wrappedMsg)
-
 	if m.Quitting {
 		return "Tchau!\n"
 	}
+
+	status := m.renderStatusBar()
 
 	baseView := ""
 
@@ -719,50 +687,6 @@ func (m Model) View() string {
 	if m.showHelp {
 		return m.viewHelpMenu(baseView)
 	}
-
-	leader = strings.Title(m.Config.LeaderKey)
-
-	if leader == "" {
-		leader = "Leader"
-	}
-
-	msg = m.statusMsg
-
-	if msg == "" {
-		if len(m.searchResults) > 0 {
-			msg = fmt.Sprintf("Search: %s (%d/%d) | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
-				m.searchQuery, m.currentResultIndex+1, len(m.searchResults), leader, leader, leader, leader, leader)
-		} else if isMarkdownFile(m.FileName) {
-			if m.viewMode == ViewModeSplit {
-				msg = fmt.Sprintf("%s+u: Close Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
-					leader, leader, leader, leader, leader)
-			} else {
-				msg = fmt.Sprintf("%s+u: Preview | %s+h: Help | %s+q: Quit | %s+s: Save | %s+p: Larry Finder",
-					leader, leader, leader, leader, leader)
-			}
-		} else {
-			msg = fmt.Sprintf("%s+o: Open File | %s+h: Help | %s+q: Quit | %s+s: Save | %s+f: Search File | %s+p: Larry Finder",
-				leader, leader, leader, leader, leader, leader)
-		}
-	}
-
-	fileStatus = m.FileName
-	if fileStatus == "" {
-		fileStatus = "[No Name]"
-	}
-	if m.Modified {
-		fileStatus += " [+]"
-	}
-
-	fullStatus = fmt.Sprintf(" %s │ %s", fileStatus, msg)
-
-	width = m.Width
-	if width < 20 {
-		width = 20
-	}
-
-	wrappedMsg = lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
-	status = statusBarStyle.Width(width).Render(wrappedMsg)
 
 	// Pad baseView so the status bar is always at the bottom of the terminal
 	baseHeight := lipgloss.Height(baseView)
