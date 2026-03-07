@@ -203,4 +203,3 @@ larry -config path/to/your/config.json
 - [x] Improve resizing and responsiveness
 - [x] Agile navigation movements (Leader+arrows for word/line jumping)
 - [ ] Let Larry be more hackable, allowing users to add their own features, color schemes, etc
-- [ ] Debugger
