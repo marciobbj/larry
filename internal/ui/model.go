@@ -65,6 +65,7 @@ type Model struct {
 	markdownRenderer   *glamour.TermRenderer
 	markdownCache      string
 	markdownCacheValid bool
+	showWelcome        bool
 }
 
 func isMarkdownFile(filename string) bool {
@@ -129,6 +130,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		Modified:           false,
 		viewMode:           ViewModeEditor,
 		markdownRenderer:   nil,
+		showWelcome:        filename == "",
 	}
 }
 
@@ -467,6 +469,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Dismiss the welcome screen on any key press
+		if m.showWelcome {
+			m.showWelcome = false
+		}
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
 		if cmd != nil {
@@ -558,7 +564,9 @@ func (m Model) View() string {
 
 	baseView := ""
 
-	if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
+	if m.showWelcome {
+		baseView = m.viewWelcome()
+	} else if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
 		baseView = m.viewSplit()
 	} else if len(m.Lines) == 0 && !m.loading {
 		s := strings.Builder{}
