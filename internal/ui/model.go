@@ -756,5 +756,14 @@ func (m Model) View() string {
 	wrappedMsg = lipgloss.NewStyle().Width(width - 2).Render(fullStatus)
 	status = statusBarStyle.Width(width).Render(wrappedMsg)
 
+	// Pad baseView so the status bar is always at the bottom of the terminal
+	baseHeight := lipgloss.Height(baseView)
+	statusHeight := lipgloss.Height(status)
+	totalUsed := baseHeight + statusHeight
+	if totalUsed < m.Height {
+		padding := strings.Repeat("\n", m.Height-totalUsed)
+		baseView = baseView + padding
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left, baseView, status)
 }
