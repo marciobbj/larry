@@ -473,6 +473,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.showWelcome {
 			m.showWelcome = false
 		}
+		// Clear transient status messages on any key press
+		m.statusMsg = ""
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
 		if cmd != nil {

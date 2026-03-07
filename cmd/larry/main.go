@@ -19,20 +19,16 @@ func main() {
 	help := flag.Bool("help", false, "Show help information")
 	flag.Parse()
 
-	// Show help if requested
 	if *help {
 		showHelp()
 		return
 	}
 
-	// Initialize the system clipboard
 	err := clipboard.Init()
 	if err != nil {
 		fmt.Printf("Warning: Could not initialize clipboard: %v\n", err)
-		// Continue anyway - clipboard features may not work
 	}
 
-	// Handle CLI arguments
 	filename := ""
 	var lines []string
 	args := flag.Args()
@@ -57,7 +53,6 @@ func main() {
 		lines = []string{""}
 	}
 
-	// Load configuration
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
 		// Only print error if user explicitly provided a path that failed
