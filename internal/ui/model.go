@@ -45,6 +45,11 @@ type Model struct {
 	filePicker         filepicker.Model
 	statusMsg          string
 	yOffset            int
+	visualLineCounts   []int
+	visualLinePrefix   []int
+	visualLineWidth    int
+	visualLineVersion  int
+	visualLineComputed int
 	Lines              []string
 	CursorRow          int
 	CursorCol          int
@@ -166,6 +171,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.FileName = path
 						m.CursorRow = targetRow
 						m.CursorCol = 0
+						m.invalidateVisualCache()
 						m = m.updateViewport()
 						m.Modified = false
 					}
@@ -193,6 +199,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.CursorRow = 0
 				m.CursorCol = 0
 				m.yOffset = 0
+				m.invalidateVisualCache()
 				m.selecting = false
 				m.Modified = false
 				m.viewMode = ViewModeEditor

@@ -351,7 +351,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case msg.Type == tea.KeyTab:
 		if m.selecting {
-			m.Modified = true
+			m.markModified()
 			startRow, _ := m.startRow, m.startCol
 			endRow, _ := m.CursorRow, m.CursorCol
 			if startRow > endRow {
@@ -376,7 +376,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case msg.Type == tea.KeyShiftTab:
 		if m.selecting {
-			m.Modified = true
+			m.markModified()
 			startRow, _ := m.startRow, m.startCol
 			endRow, _ := m.CursorRow, m.CursorCol
 			if startRow > endRow {

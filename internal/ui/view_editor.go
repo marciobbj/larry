@@ -56,22 +56,28 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 
 	maxVisualLines := cfg.height
 	visualLinesRendered := 0
-	currentVisualLineIndex := 0
 
 	if cfg.showSearchUI {
 		maxVisualLines -= 2
 	}
 
-	for lineNum := 0; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
+	startLine, startVisualOffset := m.locateVisualOffset(m.yOffset, textWidth)
+
+	for lineNum := startLine; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 		line := lines[lineNum]
 		lineRunes := []rune(line)
+		lineVisualOffset := 0
+		skipVisualLines := 0
+		if lineNum == startLine {
+			skipVisualLines = startVisualOffset
+		}
 
 		renderChunk := func(runes []rune, startIdx, endIdx int, isFirst bool, _ int) {
 			if visualLinesRendered >= maxVisualLines {
 				return
 			}
-			if currentVisualLineIndex < m.yOffset {
-				currentVisualLineIndex++
+			if lineVisualOffset < skipVisualLines {
+				lineVisualOffset++
 				return
 			}
 
@@ -164,7 +170,7 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 			if visualLinesRendered < maxVisualLines {
 				s.WriteString("\n")
 			}
-			currentVisualLineIndex++
+			lineVisualOffset++
 		}
 
 		if len(lineRunes) == 0 {

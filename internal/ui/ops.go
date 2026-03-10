@@ -232,6 +232,7 @@ func (m *Model) pushUndo(op EditOp) {
 func (m *Model) markModified() {
 	m.Modified = true
 	m.markdownCacheValid = false
+	m.invalidateVisualCache()
 }
 
 func (m Model) undo() Model {
