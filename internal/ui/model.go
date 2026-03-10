@@ -389,7 +389,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.CursorCol = result.Col
 
 					// Center the result in the viewport
-					viewportHeight := m.Height - 3 // Status bar etc
+					viewportHeight := m.editorViewportHeight()
 					m.yOffset = m.CursorRow - (viewportHeight / 2)
 					if m.yOffset < 0 {
 						m.yOffset = 0
@@ -555,13 +555,7 @@ func (m Model) View() string {
 		s.WriteString("\n")
 		baseView = s.String()
 	} else {
-		editorHeight := m.Height - 1
-		if m.saving || m.goToLine || m.searching || m.replacing {
-			editorHeight -= 2
-		}
-		if editorHeight < 1 {
-			editorHeight = 1
-		}
+		editorHeight := m.editorViewportHeight()
 		baseView = m.viewEditor(editorViewConfig{
 			width:        m.Width,
 			height:       editorHeight,

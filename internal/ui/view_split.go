@@ -11,12 +11,7 @@ var splitDividerStyle = lipgloss.NewStyle().
 
 func (m Model) viewSplit() string {
 	totalWidth := m.Width
-	totalHeight := m.Height - 1
-
-	// Reserve space for prompts that View() appends with "\n\n"
-	if m.saving || m.goToLine || m.searching {
-		totalHeight -= 2
-	}
+	totalHeight := m.editorViewportHeight()
 
 	editorWidth := totalWidth / 2
 	previewWidth := totalWidth - editorWidth - 1

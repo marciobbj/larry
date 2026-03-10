@@ -144,18 +144,10 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 
 func (m Model) updateViewport() Model {
 	textWidth := m.Width
-	viewportHeight := m.Height - 1
+	viewportHeight := m.editorViewportHeight()
 
 	if m.viewMode == ViewModeSplit {
 		textWidth = m.Width / 2
-		viewportHeight = m.Height - 1
-	}
-
-	if m.saving || m.goToLine || m.searching || m.replacing {
-		viewportHeight -= 2
-	}
-	if viewportHeight < 1 {
-		viewportHeight = 1
 	}
 
 	if m.Config.LineNumbers {

@@ -173,3 +173,25 @@ func (m Model) renderStatusBar() string {
 
 	return barStyle.Render(fullBar)
 }
+
+func (m Model) statusBarHeight() int {
+	height := lipgloss.Height(m.renderStatusBar())
+	if height < 1 {
+		return 1
+	}
+	return height
+}
+
+func (m Model) editorViewportHeight() int {
+	viewportHeight := m.Height - m.statusBarHeight()
+
+	if m.saving || m.goToLine || m.searching || m.replacing {
+		viewportHeight -= 2
+	}
+
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+
+	return viewportHeight
+}
