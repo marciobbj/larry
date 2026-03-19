@@ -117,7 +117,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, m.KeyMap.Cut):
 		if m.selecting {
 			text := m.getSelectedText()
-			err := m.clipboardWrite(text)
+			err := writeClipboard(m, text)
 			if err != nil {
 				m.statusMsg = "Cut Error: " + err.Error()
 			} else {
@@ -125,6 +125,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m = m.deleteSelectedText()
 				m.statusMsg = "Cut to clipboard"
 			}
+		} else if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) && m.Lines[m.CursorRow] == "" {
+			m = m.deleteEmptyLineAtCursor()
+		} else if m.CursorRow >= 0 && m.CursorRow < len(m.Lines) && m.Lines[m.CursorRow] != "" {
+			text := m.Lines[m.CursorRow]
+			err := writeClipboard(m, text)
+			if err != nil {
+				m.statusMsg = "Cut Error: " + err.Error()
+				return m, nil
+			}
+			m.markModified()
+			m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: 0, Text: text})
+			m.Lines[m.CursorRow] = ""
+			m.CursorCol = 0
+			m.selecting = false
+			m.statusMsg = "Cut to clipboard"
 		}
 		return m, nil
 
@@ -142,7 +157,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Paste):
-		text, err := m.clipboardRead()
+		text, err := readClipboard(m)
 		if err != nil {
 			m.statusMsg = "Paste Error: " + err.Error()
 		} else {

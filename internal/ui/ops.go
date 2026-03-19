@@ -21,6 +21,14 @@ type EditOp struct {
 	Text string
 }
 
+var writeClipboard = func(m Model, text string) error {
+	return m.clipboardWrite(text)
+}
+
+var readClipboard = func(m Model) (string, error) {
+	return m.clipboardRead()
+}
+
 func (m Model) getSelectedText() string {
 	if !m.selecting {
 		return ""
@@ -121,6 +129,33 @@ func (m Model) deleteSelectedText() Model {
 	m.CursorRow = startRow
 	m.CursorCol = startCol
 	m.selecting = false
+	return m
+}
+
+func (m Model) deleteEmptyLineAtCursor() Model {
+	if m.CursorRow < 0 || m.CursorRow >= len(m.Lines) {
+		return m
+	}
+
+	if m.Lines[m.CursorRow] != "" || len(m.Lines) <= 1 {
+		return m
+	}
+
+	m.markModified()
+
+	if m.CursorRow == len(m.Lines)-1 {
+		prevLine := []rune(m.Lines[m.CursorRow-1])
+		m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow - 1, Col: len(prevLine), Text: "\n"})
+		m.Lines = m.Lines[:m.CursorRow]
+		m.CursorRow = len(m.Lines) - 1
+	} else {
+		m.pushUndo(EditOp{Type: OpDelete, Row: m.CursorRow, Col: 0, Text: "\n"})
+		m.Lines = append(m.Lines[:m.CursorRow], m.Lines[m.CursorRow+1:]...)
+	}
+
+	m.CursorCol = 0
+	m.selecting = false
+	m.statusMsg = "Removed empty line"
 	return m
 }
 
