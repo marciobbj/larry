@@ -21,13 +21,13 @@ func FindNextWordBoundary(lines []string, row, col int) (int, int) {
 
 	lineRunes := []rune(lines[row])
 	lineLen := len(lineRunes)
+	if lineLen == 0 {
+		return row, 0
+	}
 
-	// If at end of line, move to start of next line
+	// If at or past the end of line, stay on the last character.
 	if col >= lineLen {
-		if row < len(lines)-1 {
-			return row + 1, 0
-		}
-		return row, col
+		return row, lineLen - 1
 	}
 
 	// Skip current word (non-space characters)
@@ -40,15 +40,9 @@ func FindNextWordBoundary(lines []string, row, col int) (int, int) {
 		col++
 	}
 
-	// If we reached end of line, try next line
-	if col >= lineLen && row < len(lines)-1 {
-		row++
-		col = 0
-		// Skip leading spaces on new line
-		newLineRunes := []rune(lines[row])
-		for col < len(newLineRunes) && unicode.IsSpace(newLineRunes[col]) {
-			col++
-		}
+	// If we reached end of line, stay on the last character.
+	if col >= lineLen {
+		return row, lineLen - 1
 	}
 
 	return row, col
@@ -68,16 +62,14 @@ func FindPrevWordBoundary(lines []string, row, col int) (int, int) {
 	}
 
 	lineRunes := []rune(lines[row])
+	lineLen := len(lineRunes)
+	if lineLen == 0 {
+		return row, 0
+	}
 
-	// If at start of line, move to end of previous line
+	// If at or before the start of line, stay on the first character.
 	if col <= 0 {
-		if row > 0 {
-			row--
-			lineRunes = []rune(lines[row])
-			col = len(lineRunes)
-		} else {
-			return 0, 0
-		}
+		return row, 0
 	}
 
 	// Move back one to start scanning
