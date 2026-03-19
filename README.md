@@ -4,7 +4,8 @@
 
 <img src="assets/larry_cat.png" alt="Larry The Cat" width="200">
 
-A minimalist, high-performance TUI text editor written in Go.
+A minimalist, high-performance TUI text editor written in Go.<br />
+<i>Made for humans!</i> 
 
 </div>
 
