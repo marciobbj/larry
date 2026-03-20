@@ -124,7 +124,19 @@ func (m *Model) locateVisualOffset(offset int, textWidth int) (int, int) {
 // getCursorVisualOffset returns the visual line index of the cursor RELATIVE to the start of the current line.
 // To get absolute visual position relative to viewport top, we need to sum visual heights of lines between yOffset and CursorRow.
 func (m Model) getCursorVisualOffset(textWidth int) int {
-	line := []rune(m.Lines[m.CursorRow])
+	if len(m.Lines) == 0 {
+		return 0
+	}
+
+	row := m.CursorRow
+	if row < 0 {
+		row = 0
+	}
+	if row >= len(m.Lines) {
+		row = len(m.Lines) - 1
+	}
+
+	line := []rune(m.Lines[row])
 	currentLineVisualLine := 0
 	visualWidth := 0
 	for i := 0; i < m.CursorCol && i < len(line); i++ {
