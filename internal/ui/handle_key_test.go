@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -120,5 +122,54 @@ func TestCutRemovesCurrentLineContents(t *testing.T) {
 	redone := undone.redo()
 	if redone.Lines[1] != "" {
 		t.Fatalf("lines after redo = %#v, want empty second line", redone.Lines)
+	}
+}
+
+func TestSaveAutoSavesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(path, []byte("old"), 0644); err != nil {
+		t.Fatalf("setup file: %v", err)
+	}
+
+	m := InitialModel(path, []string{"new content"}, config.DefaultConfig())
+	m.Width = 80
+	m.Height = 20
+	m.Modified = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	got := updated.(Model)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read saved file: %v", err)
+	}
+	if string(data) != "new content" {
+		t.Fatalf("saved file = %q, want %q", string(data), "new content")
+	}
+	if got.saving {
+		t.Fatal("expected save flow to stay closed")
+	}
+	if got.Modified {
+		t.Fatal("expected buffer to be marked clean")
+	}
+	if got.statusMsg != "Saved: "+path {
+		t.Fatalf("status = %q, want %q", got.statusMsg, "Saved: "+path)
+	}
+}
+
+func TestSavePromptsForNewFile(t *testing.T) {
+	m := InitialModel("", []string{"draft"}, config.DefaultConfig())
+	m.Width = 80
+	m.Height = 20
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	got := updated.(Model)
+
+	if !got.saving {
+		t.Fatal("expected save flow to open for unnamed file")
+	}
+	if got.textInput.Value() != "" {
+		t.Fatalf("filename prompt value = %q, want empty", got.textInput.Value())
 	}
 }

@@ -42,9 +42,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.KeyMap.Save):
+		if m.FileName != "" {
+			content := strings.Join(m.Lines, "\n")
+			err := os.WriteFile(m.FileName, []byte(content), 0644)
+			if err != nil {
+				m.statusMsg = "Error saving: " + err.Error()
+			} else {
+				m.statusMsg = "Saved: " + m.FileName
+				m.Modified = false
+			}
+			return m, nil
+		}
+
 		m.saving = true
 		m.textInput.Focus()
-		m.textInput.SetValue(m.FileName)
+		m.textInput.SetValue("")
 		m.textInput.Prompt = "Filename: "
 		return m, nil
 
