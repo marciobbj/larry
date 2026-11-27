@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to build and publish (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test & Vet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test -v ./...
+
+  release:
+    name: Build & Publish Release
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Determine release version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Cross-compile release binaries
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          targets=(
+            "linux amd64"
+            "linux arm64"
+            "darwin amd64"
+            "darwin arm64"
+            "windows amd64"
+          )
+
+          LDFLAGS="-s -w -X larry/internal/ui.AppVersion=${VERSION}"
+
+          for entry in "${targets[@]}"; do
+            read -r GOOS GOARCH <<< "${entry}"
+            BIN_NAME="larry"
+            if [[ "${GOOS}" == "windows" ]]; then
+              BIN_NAME="larry.exe"
+            fi
+
+            STAGE_DIR="dist/stage_${GOOS}_${GOARCH}"
+            mkdir -p "${STAGE_DIR}"
+
+            echo "Building ${GOOS}/${GOARCH} (${VERSION})..."
+            GOOS="${GOOS}" GOARCH="${GOARCH}" go build -trimpath -ldflags "${LDFLAGS}" -o "${STAGE_DIR}/${BIN_NAME}" ./cmd/larry
+
+            # Verify linux/amd64 binary directly on runner
+            if [[ "${GOOS}" == "linux" && "${GOARCH}" == "amd64" ]]; then
+              "${STAGE_DIR}/${BIN_NAME}" -version
+            fi
+
+            cp README.md LICENSE assets/larry.svg "${STAGE_DIR}/"
+
+            ARCHIVE_BASE="larry_${VERSION}_${GOOS}_${GOARCH}"
+            if [[ "${GOOS}" == "windows" ]]; then
+              (cd "${STAGE_DIR}" && zip -q -r "../${ARCHIVE_BASE}.zip" .)
+            else
+              tar -C "${STAGE_DIR}" -czf "dist/${ARCHIVE_BASE}.tar.gz" .
+            fi
+
+            rm -rf "${STAGE_DIR}"
+          done
+
+          (cd dist && sha256sum larry_* > checksums.txt)
+          ls -lh dist/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Larry ${{ steps.version.outputs.tag }}"
+          generate_release_notes: true
+          files: |
+            dist/larry_*.tar.gz
+            dist/larry_*.zip
+            dist/checksums.txt
+            assets/larry.svg
+            assets/larry.png

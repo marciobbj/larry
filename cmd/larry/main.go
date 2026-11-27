@@ -17,8 +17,14 @@ import (
 func main() {
 	configPath := flag.String("config", "", "Path to configuration file")
 	themeOverride := flag.String("theme", "", "Override color theme (e.g. omarchy, dracula, nord)")
+	showVersion := flag.Bool("version", false, "Show version information")
 	help := flag.Bool("help", false, "Show help information")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("larry %s\n", ui.AppVersion)
+		return
+	}
 
 	if *help {
 		showHelp()
@@ -104,6 +110,7 @@ ARGUMENTS:
 OPTIONS:
   -config string    Path to configuration file (default: uses built-in defaults)
   -theme string     Override color theme (e.g., "omarchy", "dracula", "monokai", "nord")
+  -version          Show version information and exit
   -help             Show this help information
 
 EXAMPLES:
