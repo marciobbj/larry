@@ -9,7 +9,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-a6e3a1?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v1.0.0-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
+[![Version](https://img.shields.io/badge/Version-v1.1.1-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
 
 </div>
 
@@ -56,7 +56,7 @@ Larry sits in the sweet spot between **Nano** and **Neovim**: familiar shortcuts
 Download the latest release archive for Linux, macOS, or Windows from [GitHub Releases](https://github.com/marciobbj/larry/releases/latest), extract it, and place `larry` on your `PATH`:
 
 ```bash
-tar -xzf larry_v1.0.0_linux_amd64.tar.gz
+tar -xzf larry_v1.1.1_linux_amd64.tar.gz
 sudo mv larry /usr/local/bin/
 larry -version
 ```
