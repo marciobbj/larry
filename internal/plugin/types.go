@@ -61,6 +61,20 @@ type GutterSign struct {
 	Priority int
 }
 
+// TextHighlight styles an inline column range [Col, EndCol) on a 0-based Line.
+// FG and BG accept semantic palette names or hex colors (e.g. "#ff5555").
+type TextHighlight struct {
+	Line      int
+	Col       int
+	EndCol    int
+	FG        string
+	BG        string
+	Bold      bool
+	Italic    bool
+	Underline bool
+	Priority  int
+}
+
 // StatusBadge is a compact segment rendered in the status bar.
 type StatusBadge struct {
 	ID       string

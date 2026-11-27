@@ -370,6 +370,45 @@ func TestDiagnosticsGutterAndBadges(t *testing.T) {
 	}
 }
 
+func TestInlineHighlights(t *testing.T) {
+	mgr := NewManager(config.DefaultConfig(), "")
+	defer mgr.Close()
+
+	info := mgr.LoadSource("colorizer", `
+		larry.cmd.register("hl.apply", function()
+			larry.highlights.set(larry.buf.filepath(), "colorizer", {
+				{ line = 1, col = 1, end_col = 8, fg = "#ffffff", bg = "#ff5555", bold = true },
+			})
+		end)
+		larry.cmd.register("hl.clear", function()
+			larry.highlights.clear(larry.buf.filepath(), "colorizer")
+		end)
+	`)
+	if !info.Loaded {
+		t.Fatalf("load failed: %s", info.Err)
+	}
+
+	api := newMockAPI()
+	if err := mgr.RunCommand(api, "hl.apply"); err != nil {
+		t.Fatal(err)
+	}
+	hls := mgr.HighlightsByLine(api.FilePath())
+	if len(hls[0]) != 1 {
+		t.Fatalf("expected 1 highlight on row 0, got %+v", hls)
+	}
+	h := hls[0][0]
+	if h.Col != 0 || h.EndCol != 7 || h.BG != "#ff5555" || h.FG != "#ffffff" || !h.Bold {
+		t.Fatalf("unexpected highlight: %+v", h)
+	}
+
+	if err := mgr.RunCommand(api, "hl.clear"); err != nil {
+		t.Fatal(err)
+	}
+	if len(mgr.HighlightsByLine(api.FilePath())) != 0 {
+		t.Fatalf("expected highlights cleared")
+	}
+}
+
 func TestExecSyncAsyncAndJSON(t *testing.T) {
 	mgr := NewManager(config.DefaultConfig(), "")
 	defer mgr.Close()

@@ -59,6 +59,8 @@ type Manager struct {
 	diagnostics map[string]map[string][]Diagnostic
 	// absPath -> namespace -> row (0-based) -> GutterSign
 	gutterSigns map[string]map[string]map[int]GutterSign
+	// absPath -> namespace -> row (0-based) -> []TextHighlight
+	highlights map[string]map[string]map[int][]TextHighlight
 	// badge ID -> StatusBadge
 	badges map[string]StatusBadge
 
@@ -83,6 +85,7 @@ func NewManager(cfg config.Config, pluginsDir string) *Manager {
 		keymaps:     make(map[string]*registeredKeymap),
 		diagnostics: make(map[string]map[string][]Diagnostic),
 		gutterSigns: make(map[string]map[string]map[int]GutterSign),
+		highlights:  make(map[string]map[string]map[int][]TextHighlight),
 		badges:      make(map[string]StatusBadge),
 		lspClients:  make(map[string]*LSPClient),
 		timers:      make(map[int64]*time.Timer),
@@ -308,6 +311,7 @@ func (m *Manager) Reload(api EditorAPI) []PluginInfo {
 	m.keymaps = make(map[string]*registeredKeymap)
 	m.diagnostics = make(map[string]map[string][]Diagnostic)
 	m.gutterSigns = make(map[string]map[string]map[int]GutterSign)
+	m.highlights = make(map[string]map[string]map[int][]TextHighlight)
 	m.badges = make(map[string]StatusBadge)
 	m.lspClients = make(map[string]*LSPClient)
 	m.timers = make(map[int64]*time.Timer)
@@ -713,6 +717,90 @@ func (m *Manager) ClearGutterSigns(path, namespace string) {
 	if byNS, ok := m.gutterSigns[key]; ok {
 		delete(byNS, namespace)
 	}
+}
+
+// SetHighlights replaces inline text highlights for a file and namespace.
+func (m *Manager) SetHighlights(path, namespace string, spans []TextHighlight) {
+	key := normalizePathKey(path)
+	if key == "" {
+		return
+	}
+	if namespace == "" {
+		namespace = "default"
+	}
+	byLine := make(map[int][]TextHighlight)
+	for _, h := range spans {
+		if h.Line < 0 || h.EndCol <= h.Col {
+			continue
+		}
+		byLine[h.Line] = append(byLine[h.Line], h)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.highlights[key]; !ok {
+		m.highlights[key] = make(map[string]map[int][]TextHighlight)
+	}
+	m.highlights[key][namespace] = byLine
+}
+
+// ClearHighlights clears inline text highlights for a file and/or namespace.
+func (m *Manager) ClearHighlights(path, namespace string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if path == "" {
+		if namespace == "" {
+			m.highlights = make(map[string]map[string]map[int][]TextHighlight)
+			return
+		}
+		for _, byNS := range m.highlights {
+			delete(byNS, namespace)
+		}
+		return
+	}
+	key := normalizePathKey(path)
+	if namespace == "" {
+		delete(m.highlights, key)
+		return
+	}
+	if byNS, ok := m.highlights[key]; ok {
+		delete(byNS, namespace)
+	}
+}
+
+// HighlightsByLine returns merged inline highlights for a file grouped by 0-based row,
+// sorted by ascending priority so higher-priority spans win when overlapping.
+func (m *Manager) HighlightsByLine(path string) map[int][]TextHighlight {
+	if m == nil || path == "" {
+		return nil
+	}
+	key := normalizePathKey(path)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	byNS := m.highlights[key]
+	if len(byNS) == 0 {
+		return nil
+	}
+	merged := make(map[int][]TextHighlight)
+	for _, perLine := range byNS {
+		for row, list := range perLine {
+			merged[row] = append(merged[row], list...)
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	for row := range merged {
+		list := merged[row]
+		if len(list) > 1 {
+			sort.Slice(list, func(i, j int) bool {
+				if list[i].Priority != list[j].Priority {
+					return list[i].Priority < list[j].Priority
+				}
+				return list[i].Col < list[j].Col
+			})
+		}
+	}
+	return merged
 }
 
 // EffectiveGutterSigns merges explicit gutter signs and diagnostic markers for a file.

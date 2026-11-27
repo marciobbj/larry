@@ -86,6 +86,7 @@ func (m *Manager) registerBindings(L *lua.LState) {
 	m.registerUIModule(L, larryTbl)
 	m.registerDiagnosticsModule(L, larryTbl)
 	m.registerGutterModule(L, larryTbl)
+	m.registerHighlightsModule(L, larryTbl)
 	m.registerCmdModule(L, larryTbl)
 	m.registerKeymapModule(L, larryTbl)
 	m.registerExecModule(L, larryTbl)
@@ -627,6 +628,63 @@ func (m *Manager) registerGutterModule(L *lua.LState, larryTbl *lua.LTable) {
 	L.SetField(larryTbl, "gutter", gutterTbl)
 }
 
+func (m *Manager) registerHighlightsModule(L *lua.LState, larryTbl *lua.LTable) {
+	hlTbl := L.NewTable()
+
+	// larry.highlights.set(path, namespace, items)
+	// Each item: { line = 1-based, col = 1-based inclusive, end_col = 1-based exclusive,
+	//              fg = "#ffffff", bg = "#ff5555", bold = false, italic = false, underline = false, priority = 10 }
+	L.SetField(hlTbl, "set", L.NewFunction(func(L *lua.LState) int {
+		path := L.OptString(1, "")
+		if path == "" && m.activeAPI != nil {
+			path = m.activeAPI.FilePath()
+		}
+		ns := L.CheckString(2)
+		itemsTbl := L.CheckTable(3)
+
+		spans := make([]TextHighlight, 0, itemsTbl.Len())
+		for i := 1; i <= itemsTbl.Len(); i++ {
+			tbl, ok := itemsTbl.RawGetInt(i).(*lua.LTable)
+			if !ok {
+				continue
+			}
+			line := getTableInt(tbl, "line", 1) - 1
+			col := getTableInt(tbl, "col", 1) - 1
+			endCol := getTableInt(tbl, "end_col", 0) - 1
+			if line < 0 || col < 0 || endCol <= col {
+				continue
+			}
+			spans = append(spans, TextHighlight{
+				Line:      line,
+				Col:       col,
+				EndCol:    endCol,
+				FG:        getTableString(tbl, "fg"),
+				BG:        getTableString(tbl, "bg"),
+				Bold:      getTableBool(tbl, "bold"),
+				Italic:    getTableBool(tbl, "italic"),
+				Underline: getTableBool(tbl, "underline"),
+				Priority:  getTableInt(tbl, "priority", 10),
+			})
+		}
+
+		m.SetHighlights(path, ns, spans)
+		return 0
+	}))
+
+	// larry.highlights.clear(path?, namespace?)
+	L.SetField(hlTbl, "clear", L.NewFunction(func(L *lua.LState) int {
+		path := L.OptString(1, "")
+		ns := L.OptString(2, "")
+		if path == "" && L.GetTop() < 1 && m.activeAPI != nil {
+			path = m.activeAPI.FilePath()
+		}
+		m.ClearHighlights(path, ns)
+		return 0
+	}))
+
+	L.SetField(larryTbl, "highlights", hlTbl)
+}
+
 func (m *Manager) registerCmdModule(L *lua.LState, larryTbl *lua.LTable) {
 	cmdTbl := L.NewTable()
 
@@ -1130,6 +1188,14 @@ func getTableInt(tbl *lua.LTable, key string, fallback int) int {
 		return int(n)
 	}
 	return fallback
+}
+
+func getTableBool(tbl *lua.LTable, key string) bool {
+	v := tbl.RawGetString(key)
+	if b, ok := v.(lua.LBool); ok {
+		return bool(b)
+	}
+	return false
 }
 
 func getTableSubTable(tbl *lua.LTable, key string) *lua.LTable {

@@ -17,13 +17,23 @@ type editorViewConfig struct {
 	hideLeftBorder bool
 }
 
+type highlightStyleKey struct {
+	fg        string
+	bg        string
+	bold      bool
+	italic    bool
+	underline bool
+}
+
 type editorRenderState struct {
-	cursors     []CursorSelection
-	cursorsByRow map[int][]CursorSelection
-	occByRow    map[int][]colSpan
-	gitChanges  map[int]git.LineChange
-	gutterSigns map[int]plugin.GutterSign
-	diagsByRow  map[int][]plugin.Diagnostic
+	cursors         []CursorSelection
+	cursorsByRow    map[int][]CursorSelection
+	occByRow        map[int][]colSpan
+	gitChanges      map[int]git.LineChange
+	gutterSigns     map[int]plugin.GutterSign
+	diagsByRow      map[int][]plugin.Diagnostic
+	highlightsByRow map[int][]plugin.TextHighlight
+	hlStyleCache    map[highlightStyleKey]lipgloss.Style
 }
 
 func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderState {
@@ -36,19 +46,62 @@ func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderSta
 	}
 	var gutterSigns map[int]plugin.GutterSign
 	var diagsByRow map[int][]plugin.Diagnostic
+	var highlightsByRow map[int][]plugin.TextHighlight
+	var hlCache map[highlightStyleKey]lipgloss.Style
 	if m.plugins != nil && m.FileName != "" {
 		absPath := normalizeAbsPath(m.FileName)
 		gutterSigns = m.plugins.EffectiveGutterSigns(absPath)
 		diagsByRow = m.plugins.DiagnosticsByLine(absPath)
+		highlightsByRow = m.plugins.HighlightsByLine(absPath)
+		if len(highlightsByRow) > 0 {
+			hlCache = make(map[highlightStyleKey]lipgloss.Style, 16)
+		}
 	}
 	return editorRenderState{
-		cursors:      cursors,
-		cursorsByRow: byRow,
-		occByRow:     m.getVisibleOccurrences(viewStartRow, viewEndRow),
-		gitChanges:   m.gitLineChanges(),
-		gutterSigns:  gutterSigns,
-		diagsByRow:   diagsByRow,
+		cursors:         cursors,
+		cursorsByRow:    byRow,
+		occByRow:        m.getVisibleOccurrences(viewStartRow, viewEndRow),
+		gitChanges:      m.gitLineChanges(),
+		gutterSigns:     gutterSigns,
+		diagsByRow:      diagsByRow,
+		highlightsByRow: highlightsByRow,
+		hlStyleCache:    hlCache,
 	}
+}
+
+func (rs editorRenderState) resolveHighlightStyle(h plugin.TextHighlight) lipgloss.Style {
+	key := highlightStyleKey{
+		fg:        h.FG,
+		bg:        h.BG,
+		bold:      h.Bold,
+		italic:    h.Italic,
+		underline: h.Underline,
+	}
+	if rs.hlStyleCache != nil {
+		if st, ok := rs.hlStyleCache[key]; ok {
+			return st
+		}
+	}
+	st := lipgloss.NewStyle()
+	if h.FG != "" {
+		st = st.Foreground(paletteColorByName(h.FG))
+	}
+	if h.BG != "" {
+		st = st.Background(paletteColorByName(h.BG))
+	}
+	if h.Bold {
+		st = st.Bold(true)
+	}
+	if h.Italic {
+		st = st.Italic(true)
+	}
+	if h.Underline {
+		st = st.Underline(true)
+	}
+	if rs.hlStyleCache != nil {
+		rs.hlStyleCache[key] = st
+	}
+	return st
 }
 
 func (rs editorRenderState) isSelected(row, col int) bool {
@@ -457,6 +510,17 @@ func (m Model) resolveCharStyle(
 	if i < len(syntaxStyles) {
 		style = syntaxStyles[i]
 		applyStyle = true
+	}
+
+	if len(rs.highlightsByRow) > 0 {
+		if lineHls := rs.highlightsByRow[lineNum]; len(lineHls) > 0 {
+			for _, h := range lineHls {
+				if i >= h.Col && i < h.EndCol {
+					style = rs.resolveHighlightStyle(h)
+					applyStyle = true
+				}
+			}
+		}
 	}
 
 	if len(rs.diagsByRow) > 0 {
