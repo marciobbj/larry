@@ -74,6 +74,8 @@ type Model struct {
 	markdownCache      string
 	markdownCacheValid bool
 	showWelcome        bool
+	tabs               []EditorTab
+	activeTab          int
 }
 
 func isMarkdownFile(filename string) bool {
@@ -95,6 +97,13 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 	ft := NewFileTreeModel("")
 	if filename != "" {
 		ft.SetActiveFile(filename)
+	}
+
+	initialTab := EditorTab{
+		FileName: filename,
+		AbsPath:  normalizeAbsPath(filename),
+		Lines:    lines,
+		ViewMode: ViewModeEditor,
 	}
 
 	return Model{
@@ -128,6 +137,8 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		viewMode:           ViewModeEditor,
 		markdownRenderer:   nil,
 		showWelcome:        filename == "",
+		tabs:               []EditorTab{initialTab},
+		activeTab:          0,
 	}
 }
 
@@ -136,46 +147,56 @@ func (m *Model) OpenDirectory(dirPath string) {
 	m.fileTree = NewFileTreeModel(dirPath)
 	m.fileTree.Visible = true
 	m.fileTree.Focused = true
-	m.fileTree.Height = m.editorViewportHeight()
+	m.fileTree.Height = m.workspaceHeight()
 }
 
 func (m Model) openFile(path string) (Model, error) {
+	m.ensureTabsInitialized()
+	absPath := normalizeAbsPath(path)
+
+	displayPath := path
+	if wd, wdErr := os.Getwd(); wdErr == nil {
+		if rel, relErr := filepath.Rel(wd, absPath); relErr == nil && !strings.HasPrefix(rel, "..") {
+			displayPath = rel
+		}
+	}
+
+	// If already open in a tab, switch to it without losing unsaved edits or cursor position.
+	if existingIdx := m.findTabByAbsPath(absPath); existingIdx >= 0 {
+		m = m.switchToTab(existingIdx)
+		m.statusMsg = "Switched to: " + displayPath
+		return m, nil
+	}
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		m.statusMsg = "Error opening: " + err.Error()
 		return m, err
 	}
 
-	displayPath := path
-	if wd, wdErr := os.Getwd(); wdErr == nil {
-		if abs, absErr := filepath.Abs(path); absErr == nil {
-			if rel, relErr := filepath.Rel(wd, abs); relErr == nil && !strings.HasPrefix(rel, "..") {
-				displayPath = rel
-			}
-		}
+	newLines := strings.Split(string(content), "\n")
+	if len(newLines) == 0 {
+		newLines = []string{""}
 	}
 
-	m.Lines = strings.Split(string(content), "\n")
-	m.FileName = displayPath
-	m.CursorRow = 0
-	m.CursorCol = 0
-	m.yOffset = 0
-	m.xOffset = 0
-	m.UndoStack = nil
-	m.RedoStack = nil
-	m.selecting = false
-	m.Modified = false
+	newTab := EditorTab{
+		FileName: displayPath,
+		AbsPath:  absPath,
+		Lines:    newLines,
+		ViewMode: ViewModeEditor,
+	}
+
+	if m.isEmptyInitialTab() {
+		m.tabs[0] = newTab
+		m.activeTab = 0
+	} else {
+		m.saveActiveTabState()
+		m.tabs = append(m.tabs, newTab)
+		m.activeTab = len(m.tabs) - 1
+	}
+
 	m.showWelcome = false
-	m.viewMode = ViewModeEditor
-	m.markdownRenderer = nil
-	m.markdownCache = ""
-	m.markdownCacheValid = false
-	m.searchResults = nil
-	m.replaceResults = nil
-	m.currentResultIndex = -1
-	m.currReplaceIndex = -1
-	m.invalidateVisualCache()
-	m.fileTree.SetActiveFile(path)
+	m = m.loadTabState(m.activeTab)
 	m.statusMsg = "Opened: " + displayPath
 	return m, nil
 }
@@ -203,7 +224,7 @@ func (m Model) toggleFileTree() Model {
 	} else {
 		m.fileTree.Visible = true
 		m.fileTree.Focused = true
-		m.fileTree.Height = m.editorViewportHeight()
+		m.fileTree.Height = m.workspaceHeight()
 		m.fileTree.Rebuild()
 		if m.FileName != "" {
 			m.fileTree.SetActiveFile(m.FileName)
@@ -252,6 +273,23 @@ func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case key.Matches(msg, m.KeyMap.Save):
 		return m.handleKey(msg)
+
+	case key.Matches(msg, m.KeyMap.NewTab):
+		m = m.newTab()
+		m.fileTree.Focused = false
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.CloseTab):
+		m = m.closeActiveTab()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.NextTab):
+		m = m.nextTab()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.PrevTab):
+		m = m.prevTab()
+		return m, nil
 
 	case key.Matches(msg, m.KeyMap.JumpLinesUp) || msg.Type == tea.KeyPgUp:
 		m.fileTree.MoveUp(5)
@@ -429,55 +467,6 @@ func (m Model) openGlobalReplace() Model {
 	return m
 }
 
-func (m Model) reloadActiveFileIfModified(modifiedPaths []string) Model {
-	if m.FileName == "" || len(modifiedPaths) == 0 {
-		return m
-	}
-	absCurrent, err := filepath.Abs(m.FileName)
-	if err != nil {
-		absCurrent = filepath.Clean(m.FileName)
-	} else {
-		absCurrent = filepath.Clean(absCurrent)
-	}
-
-	matched := false
-	for _, p := range modifiedPaths {
-		if filepath.Clean(p) == absCurrent {
-			matched = true
-			break
-		}
-	}
-	if !matched {
-		return m
-	}
-
-	raw, err := os.ReadFile(absCurrent)
-	if err != nil {
-		return m
-	}
-	m.Lines = strings.Split(string(raw), "\n")
-	if len(m.Lines) == 0 {
-		m.Lines = []string{""}
-	}
-	if m.CursorRow >= len(m.Lines) {
-		m.CursorRow = len(m.Lines) - 1
-	}
-	if m.CursorRow < 0 {
-		m.CursorRow = 0
-	}
-	lineLen := len([]rune(m.Lines[m.CursorRow]))
-	if m.CursorCol > lineLen {
-		m.CursorCol = lineLen
-	}
-	m.UndoStack = nil
-	m.RedoStack = nil
-	m.selecting = false
-	m.Modified = false
-	m.markdownCacheValid = false
-	m.invalidateVisualCache()
-	return m.updateViewport()
-}
-
 type omarchyThemeTickMsg struct{}
 
 func omarchyWatchTickCmd() tea.Cmd {
@@ -551,7 +540,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.statusMsg = fmt.Sprintf("Replaced %d occurrences in %d files", res.TotalReplacements, res.FilesModified)
 			}
-			m = m.reloadActiveFileIfModified(res.ModifiedFilePaths)
+			m = m.reloadModifiedTabs(res.ModifiedFilePaths)
 			m.fileTree.Rebuild()
 			return m, nil
 		}
@@ -616,6 +605,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "Saved: " + filename
 					m.FileName = filename
 					m.Modified = false
+					m.saveActiveTabState()
 					m.fileTree.Rebuild()
 					m.fileTree.SetActiveFile(filename)
 				}
@@ -886,7 +876,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		m.fileTree.Height = m.editorViewportHeight()
+		m.fileTree.Height = m.workspaceHeight()
 
 		// Always update markdown renderer if it exists or if we are in split mode
 		m = m.syncMarkdownForLayout()
@@ -918,7 +908,8 @@ func (m Model) View() string {
 
 	status := m.renderStatusBar()
 
-	viewportHeight := m.editorViewportHeight()
+	wsHeight := m.workspaceHeight()
+	editorHeight := m.editorViewportHeight()
 	treeW := m.sidebarWidth()
 	mainW := m.mainContentWidth()
 
@@ -926,32 +917,42 @@ func (m Model) View() string {
 
 	if m.showWelcome {
 		mainView = m.viewWelcome()
-	} else if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
-		mainView = m.viewSplit()
-	} else if len(m.Lines) == 0 {
-		s := strings.Builder{}
-		if treeW == 0 {
-			s.WriteString(borderStyle.Render("│"))
-		}
-		if m.Config.LineNumbers {
-			s.WriteString(lineNumStyle.Render("   1 "))
-		}
-		s.WriteString(styleCursor.Render(" "))
-		s.WriteString("\n")
-		mainView = s.String()
 	} else {
-		mainView = m.viewEditor(editorViewConfig{
-			width:          mainW,
-			height:         viewportHeight,
-			showSearchUI:   m.searching,
-			hideLeftBorder: treeW > 0,
-		})
+		var editorArea string
+		if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
+			editorArea = m.viewSplit()
+		} else if len(m.Lines) == 0 {
+			s := strings.Builder{}
+			if treeW == 0 {
+				s.WriteString(borderStyle.Render("│"))
+			}
+			if m.Config.LineNumbers {
+				s.WriteString(lineNumStyle.Render("   1 "))
+			}
+			s.WriteString(styleCursor.Render(" "))
+			s.WriteString("\n")
+			editorArea = s.String()
+		} else {
+			editorArea = m.viewEditor(editorViewConfig{
+				width:          mainW,
+				height:         editorHeight,
+				showSearchUI:   m.searching,
+				hideLeftBorder: treeW > 0,
+			})
+		}
+
+		if m.showTabBar() {
+			tabBar := m.renderTabBar(mainW)
+			mainView = lipgloss.JoinVertical(lipgloss.Left, tabBar, editorArea)
+		} else {
+			mainView = editorArea
+		}
 	}
 
 	baseView := mainView
 	if treeW > 0 {
-		treeView := m.fileTree.View(treeW, viewportHeight)
-		divider := m.fileTree.DividerView(viewportHeight)
+		treeView := m.fileTree.View(treeW, wsHeight)
+		divider := m.fileTree.DividerView(wsHeight)
 		baseView = lipgloss.JoinHorizontal(lipgloss.Top, treeView, divider, mainView)
 	}
 

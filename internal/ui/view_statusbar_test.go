@@ -18,7 +18,7 @@ func TestEditorViewportHeightUsesWrappedStatusBarHeight(t *testing.T) {
 		t.Fatalf("expected wrapped status bar for narrow width, got height %d", statusHeight)
 	}
 
-	want := m.Height - statusHeight
+	want := m.Height - statusHeight - m.tabBarHeight()
 	if got := m.editorViewportHeight(); got != want {
 		t.Fatalf("editorViewportHeight() = %d, want %d", got, want)
 	}
@@ -30,7 +30,7 @@ func TestEditorViewportHeightReservesPromptLines(t *testing.T) {
 	m.Height = 10
 	m.searching = true
 
-	want := m.Height - lipgloss.Height(m.renderStatusBar()) - 2
+	want := m.Height - lipgloss.Height(m.renderStatusBar()) - 2 - m.tabBarHeight()
 	if want < 1 {
 		want = 1
 	}

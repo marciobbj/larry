@@ -76,6 +76,9 @@ func main() {
 	if dirToOpen != "" {
 		m.OpenDirectory(dirToOpen)
 	}
+	if len(args) > 1 {
+		m.OpenFiles(args[1:])
+	}
 
 	// Create and run the Bubble Tea program
 	p := tea.NewProgram(m, tea.WithAltScreen()) // Use alternate screen for clean TUI

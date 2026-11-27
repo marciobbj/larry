@@ -190,15 +190,9 @@ func (m Model) statusBarHeight() int {
 }
 
 func (m Model) editorViewportHeight() int {
-	viewportHeight := m.Height - m.statusBarHeight()
-
-	if m.saving || m.goToLine || m.searching || m.replacing {
-		viewportHeight -= 2
-	}
-
+	viewportHeight := m.workspaceHeight() - m.tabBarHeight()
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
-
 	return viewportHeight
 }

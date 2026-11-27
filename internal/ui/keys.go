@@ -45,9 +45,23 @@ type KeyMap struct {
 	SelectToLineEnd       key.Binding
 	ToggleMarkdownPreview key.Binding
 	ToggleWordWrap        key.Binding
+	NewTab                key.Binding
+	CloseTab              key.Binding
+	NextTab               key.Binding
+	PrevTab               key.Binding
 }
 
 func NewKeyMap(leader string) KeyMap {
+	prevTabKeys := []string{"alt+["}
+	nextTabKeys := []string{"alt+]"}
+	if leader == "alt" {
+		prevTabKeys = append(prevTabKeys, "ctrl+left")
+		nextTabKeys = append(nextTabKeys, "ctrl+right")
+	} else {
+		prevTabKeys = append(prevTabKeys, "alt+left")
+		nextTabKeys = append(nextTabKeys, "alt+right")
+	}
+
 	return KeyMap{
 		Quit:               key.NewBinding(key.WithKeys(leader + "+q")),
 		SelectAll:          key.NewBinding(key.WithKeys(leader + "+a")),
@@ -91,6 +105,10 @@ func NewKeyMap(leader string) KeyMap {
 		SelectToLineEnd:       key.NewBinding(key.WithKeys("shift+end")),
 		ToggleMarkdownPreview: key.NewBinding(key.WithKeys(leader + "+u")),
 		ToggleWordWrap:        key.NewBinding(key.WithKeys(leader + "+l")),
+		NewTab:                key.NewBinding(key.WithKeys(leader + "+n")),
+		CloseTab:              key.NewBinding(key.WithKeys(leader + "+d")),
+		PrevTab:               key.NewBinding(key.WithKeys(prevTabKeys...)),
+		NextTab:               key.NewBinding(key.WithKeys(nextTabKeys...)),
 	}
 }
 

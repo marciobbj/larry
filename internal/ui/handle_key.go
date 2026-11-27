@@ -34,6 +34,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case key.Matches(msg, m.KeyMap.NewTab):
+		m = m.newTab()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.CloseTab):
+		m = m.closeActiveTab()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.NextTab):
+		m = m.nextTab()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.PrevTab):
+		m = m.prevTab()
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.ToggleWordWrap):
 		m.Config.WordWrap = !m.Config.WordWrap
 		m.xOffset = 0
@@ -63,6 +79,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			} else {
 				m.statusMsg = "Saved: " + m.FileName
 				m.Modified = false
+				m.saveActiveTabState()
 			}
 			return m, nil
 		}
@@ -129,7 +146,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		} else {
 			m.fileTree.Focused = !m.fileTree.Focused
 			if m.fileTree.Focused {
-				m.fileTree.Height = m.editorViewportHeight()
+				m.fileTree.Height = m.workspaceHeight()
 				m.fileTree.Rebuild()
 			}
 		}
