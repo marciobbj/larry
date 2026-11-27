@@ -89,6 +89,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case key.Matches(msg, m.KeyMap.ToggleHelp):
 		m.showHelp = !m.showHelp
+		m.helpScroll = 0
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Quit):
@@ -151,17 +152,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.GlobalFinder):
-		m.finding = true
-		finderWidth := m.Width
-		if finderWidth > 120 {
-			finderWidth = 120
-		}
-		finderHeight := m.Height
-		if finderHeight > 25 {
-			finderHeight = 25
-		}
-		m.finder = NewFinderModel(finderWidth, finderHeight)
-		return m, m.finder.performSearch()
+		return m.openGlobalFinder()
 
 	case key.Matches(msg, m.KeyMap.Open):
 		m = m.toggleFileTree()

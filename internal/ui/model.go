@@ -72,6 +72,7 @@ type Model struct {
 	RedoStack          []EditOp
 	Config             config.Config
 	showHelp           bool
+	helpScroll         int
 	searchQuery        string
 	replaceQuery       string
 	replaceWith        string
@@ -237,6 +238,44 @@ func (m Model) syncMarkdownForLayout() Model {
 	return m
 }
 
+func (m Model) finderModalDims() (innerW, innerH int) {
+	outerW := m.Width - 6
+	if outerW > 96 {
+		outerW = 96
+	}
+	if outerW < 40 {
+		outerW = m.Width - 2
+	}
+	innerW = outerW - 6 // 2 border + 4 horizontal padding
+	if innerW < 34 {
+		innerW = 34
+	}
+
+	outerH := m.Height - 4
+	if outerH > 26 {
+		outerH = 26
+	}
+	if outerH < 13 {
+		outerH = m.Height - 2
+	}
+	innerH = outerH - 4 // 2 border + 2 vertical padding
+	if innerH < 9 {
+		innerH = 9
+	}
+	return innerW, innerH
+}
+
+func (m Model) openGlobalFinder() (Model, tea.Cmd) {
+	m.finding = true
+	innerW, innerH := m.finderModalDims()
+	root := m.fileTree.RootPath
+	if root == "" {
+		root = "."
+	}
+	m.finder = NewFinderModelInRoot(root, innerW, innerH)
+	return m, m.finder.performSearch()
+}
+
 func (m Model) toggleFileTree() Model {
 	if m.fileTree.Visible {
 		m.fileTree.Visible = false
@@ -272,6 +311,7 @@ func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case key.Matches(msg, m.KeyMap.ToggleHelp):
 		m.showHelp = !m.showHelp
+		m.helpScroll = 0
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.GlobalReplace):
@@ -279,17 +319,7 @@ func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.GlobalFinder):
-		m.finding = true
-		finderWidth := m.Width
-		if finderWidth > 120 {
-			finderWidth = 120
-		}
-		finderHeight := m.Height
-		if finderHeight > 25 {
-			finderHeight = 25
-		}
-		m.finder = NewFinderModel(finderWidth, finderHeight)
-		return m, m.finder.performSearch()
+		return m.openGlobalFinder()
 
 	case key.Matches(msg, m.KeyMap.Save):
 		return m.handleKey(msg)
@@ -613,6 +643,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.finding {
 		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.Width = msg.Width
+			m.Height = msg.Height
+			m.fileTree.Height = m.workspaceHeight()
+			innerW, innerH := m.finderModalDims()
+			var cmd tea.Cmd
+			m.finder, cmd = m.finder.Update(tea.WindowSizeMsg{Width: innerW, Height: innerH})
+			return m, cmd
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "esc":
@@ -862,9 +900,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showHelp {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			if keyMsg.Type == tea.KeyEsc || key.Matches(keyMsg, m.KeyMap.ToggleHelp) {
+			switch {
+			case keyMsg.Type == tea.KeyEsc || key.Matches(keyMsg, m.KeyMap.ToggleHelp) || keyMsg.String() == "q":
 				m.showHelp = false
+				m.helpScroll = 0
+			case keyMsg.String() == "up" || keyMsg.String() == "k":
+				if m.helpScroll > 0 {
+					m.helpScroll--
+				}
+			case keyMsg.String() == "down" || keyMsg.String() == "j":
+				m.helpScroll++
+			case keyMsg.String() == "pgup":
+				m.helpScroll -= 6
+				if m.helpScroll < 0 {
+					m.helpScroll = 0
+				}
+			case keyMsg.String() == "pgdown":
+				m.helpScroll += 6
+			case keyMsg.String() == "home" || keyMsg.String() == "g":
+				m.helpScroll = 0
+			case keyMsg.String() == "end" || keyMsg.String() == "G":
+				m.helpScroll = 999
 			}
+			return m, nil
+		}
+		if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
+			m.Width = sizeMsg.Width
+			m.Height = sizeMsg.Height
+			m.fileTree.Height = m.workspaceHeight()
+			m = m.syncMarkdownForLayout()
+			m = m.updateViewport()
 		}
 		return m, nil
 	}
@@ -946,17 +1011,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Always update markdown renderer if it exists or if we are in split mode
 		m = m.syncMarkdownForLayout()
 
-		finderWidth := msg.Width
-		if finderWidth > 120 {
-			finderWidth = 120
-		}
-		finderHeight := msg.Height
-		if finderHeight > 25 {
-			finderHeight = 25
-		}
-
+		innerW, innerH := m.finderModalDims()
 		var finderCmd tea.Cmd
-		m.finder, finderCmd = m.finder.Update(tea.WindowSizeMsg{Width: finderWidth, Height: finderHeight})
+		m.finder, finderCmd = m.finder.Update(tea.WindowSizeMsg{Width: innerW, Height: innerH})
 
 		m = m.updateViewport()
 
@@ -1088,49 +1145,9 @@ func (m Model) View() string {
 	}
 
 	if m.finding {
-		finderView := m.finder.View()
-		w := m.Width
-		if w > 120 {
-			w = 120
-		}
-		h := lipgloss.Height(finderView)
-
-		maxW := m.Width - 8
-		maxH := m.Height - 4
-
-		if w > maxW {
-			w = maxW
-		}
-		if h > maxH {
-			h = maxH
-		}
-
-		bg := modalStyle.GetBackground()
-		spacerStyle := lipgloss.NewStyle().Background(bg)
-
-		titleText := "Global Larry Finder (Tab: Switch Mode)"
-		titleGap := w - lipgloss.Width(titleText)
-		if titleGap < 0 {
-			titleGap = 0
-		}
-		leftGap := titleGap / 2
-		rightGap := titleGap - leftGap
-		title := modalTitleStyle.Width(w).Render(strings.Repeat(" ", leftGap) + titleText + strings.Repeat(" ", rightGap))
-
-		var allLines []string
-		allLines = append(allLines, title)
-		allLines = append(allLines, spacerStyle.Copy().Width(w).Render(""))
-
-		finderLines := strings.Split(finderView, "\n")
-		for i, line := range finderLines {
-			if i >= maxH-2 {
-				break
-			}
-			styledLine := strings.ReplaceAll(line, " ", spacerStyle.Render(" "))
-			allLines = append(allLines, spacerStyle.Width(w).Render(styledLine))
-		}
-
-		modal := modalStyle.Render(strings.Join(allLines, "\n"))
+		innerW, innerH := m.finderModalDims()
+		body := m.finder.Render(innerW, innerH)
+		modal := modalStyle.Render(body)
 
 		return lipgloss.Place(
 			m.Width, m.Height,
