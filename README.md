@@ -105,6 +105,7 @@ Leader key is ctrl by default.
 | **Go to Line** | `Leader+G` |
 | **Toggle Help** | `Leader+H` |
 | **Select All** | `Leader+A` |
+| **Toggle Word Wrap** | `Leader+L` |
 | **Markdown Preview** | `Leader+U` |
 | **Indent** | `TAB` |
 | **Dedent** | `Shift+Tab` |
@@ -187,6 +188,7 @@ larry -config path/to/your/config.json
 | `theme` | Syntax & UI theme (e.g., `omarchy`, `dracula`, `monokai`, `nord`, `github`). Use `omarchy` to follow your active Omarchy color scheme live. | `omarchy` (on Omarchy) / `dracula` |
 | `tab_width` | Number of spaces for a tab character | `4` |
 | `line_numbers` | Show or hide line numbers | `true` |
+| `word_wrap` | Wrap long lines instead of horizontal scrolling (toggle live with `Leader+L`) | `false` |
 | `leader_key` | Base key for shortcuts (e.g., `ctrl`, `alt`). | `ctrl` |
 
 > **Note for macOS users**: The `cmd` key is generally not natively supported as a modifier by terminal emulators. We recommend setting `leader_key` to `alt` (which corresponds to the Option key) by mapping `option` to `alt` in your terminal's settings (e.g., iTerm2, Ghostty, Kitty etc).

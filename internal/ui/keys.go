@@ -44,6 +44,7 @@ type KeyMap struct {
 	SelectToLineStart     key.Binding
 	SelectToLineEnd       key.Binding
 	ToggleMarkdownPreview key.Binding
+	ToggleWordWrap        key.Binding
 }
 
 func NewKeyMap(leader string) KeyMap {
@@ -89,6 +90,7 @@ func NewKeyMap(leader string) KeyMap {
 		SelectToLineStart:     key.NewBinding(key.WithKeys("shift+home")),
 		SelectToLineEnd:       key.NewBinding(key.WithKeys("shift+end")),
 		ToggleMarkdownPreview: key.NewBinding(key.WithKeys(leader + "+u")),
+		ToggleWordWrap:        key.NewBinding(key.WithKeys(leader + "+l")),
 	}
 }
 

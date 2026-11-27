@@ -68,6 +68,15 @@ func (m Model) renderStatusBar() string {
 	if m.Modified {
 		fileSection += modifiedStyle.Render(" ● ")
 	}
+	if m.Config.WordWrap {
+		wrapBadge := lipgloss.NewStyle().
+			Background(barBg).
+			Foreground(shortcutKey).
+			Bold(true).
+			Padding(0, 1).
+			Render("WRAP")
+		fileSection += wrapBadge
+	}
 
 	// ── If there's a custom status message, show it simply ──
 	if m.statusMsg != "" {

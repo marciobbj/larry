@@ -191,9 +191,74 @@ func (m Model) editorTextWidth() int {
 	return textWidth
 }
 
+func cursorVisualCol(line string, col int, tabWidth int) int {
+	if tabWidth < 1 {
+		tabWidth = 4
+	}
+	runes := []rune(line)
+	if col > len(runes) {
+		col = len(runes)
+	}
+	if col < 0 {
+		col = 0
+	}
+	visCol := 0
+	for i := 0; i < col; i++ {
+		if runes[i] == '\t' {
+			visCol += tabWidth
+		} else {
+			visCol++
+		}
+	}
+	return visCol
+}
+
 func (m Model) updateViewport() Model {
 	textWidth := m.editorTextWidth()
 	viewportHeight := m.editorViewportHeight()
+
+	if len(m.Lines) == 0 {
+		m.yOffset = 0
+		m.xOffset = 0
+		return m
+	}
+
+	if !m.Config.WordWrap {
+		row := m.CursorRow
+		if row < 0 {
+			row = 0
+		}
+		if row >= len(m.Lines) {
+			row = len(m.Lines) - 1
+		}
+
+		if row < m.yOffset {
+			m.yOffset = row
+		}
+		if row >= m.yOffset+viewportHeight {
+			m.yOffset = row - viewportHeight + 1
+		}
+		if m.yOffset < 0 {
+			m.yOffset = 0
+		}
+		if row == 0 {
+			m.yOffset = 0
+		}
+
+		visCol := cursorVisualCol(m.Lines[row], m.CursorCol, m.Config.TabWidth)
+		if visCol < m.xOffset {
+			m.xOffset = visCol
+		}
+		if visCol >= m.xOffset+textWidth {
+			m.xOffset = visCol - textWidth + 1
+		}
+		if m.xOffset < 0 {
+			m.xOffset = 0
+		}
+		return m
+	}
+
+	m.xOffset = 0
 
 	// Calculate absolute visual position of the cursor.
 	cursorVisualAbsPos := m.cursorVisualAbsPos(textWidth)

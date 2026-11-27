@@ -46,11 +46,13 @@ type Model struct {
 	textInput          textinput.Model
 	statusMsg          string
 	yOffset            int
+	xOffset            int
 	visualLineCounts   []int
 	visualLinePrefix   []int
 	visualLineWidth    int
 	visualLineVersion  int
 	visualLineComputed int
+	syntaxCache        *fileSyntaxCache
 	Lines              []string
 	CursorRow          int
 	CursorCol          int
@@ -107,6 +109,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		textInput:          ti,
 		saving:             false,
 		fileTree:           ft,
+		syntaxCache:        &fileSyntaxCache{},
 		Lines:              lines,
 		CursorRow:          0,
 		CursorCol:          0,
@@ -157,6 +160,7 @@ func (m Model) openFile(path string) (Model, error) {
 	m.CursorRow = 0
 	m.CursorCol = 0
 	m.yOffset = 0
+	m.xOffset = 0
 	m.UndoStack = nil
 	m.RedoStack = nil
 	m.selecting = false
@@ -770,20 +774,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Center the result in the viewport
 					viewportHeight := m.editorViewportHeight()
-					m.yOffset = m.CursorRow - (viewportHeight / 2)
+					if m.Config.WordWrap {
+						m.yOffset = m.cursorVisualAbsPos(m.editorTextWidth()) - (viewportHeight / 2)
+					} else {
+						m.yOffset = m.CursorRow - (viewportHeight / 2)
+					}
 					if m.yOffset < 0 {
 						m.yOffset = 0
 					}
-					// Ensure m.yOffset is valid (redundant check but safe)
-					if m.yOffset >= len(m.Lines) {
-						m.yOffset = len(m.Lines) - 1
-					}
-
-					// We don't strictly need updateViewport here if we manually set yOffset correctly,
-					// but it handles bounds and bottom-clamping too.
-					// However, updateViewport might override our "center" preference
-					// if it thinks the cursor is visible "enough" (at the very bottom or top).
-					// So let's force the center first, then call updateViewport to fix edge cases.
 					m = m.updateViewport()
 				}
 				return m, nil

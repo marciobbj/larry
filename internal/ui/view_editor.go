@@ -56,15 +56,21 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		textWidth = 1
 	}
 
-	lines := m.Lines
-	var s strings.Builder
-
 	maxVisualLines := cfg.height
-	visualLinesRendered := 0
-
 	if cfg.showSearchUI {
 		maxVisualLines -= 2
 	}
+	if maxVisualLines < 1 {
+		maxVisualLines = 1
+	}
+
+	if !m.Config.WordWrap {
+		return m.viewEditorNoWrap(cfg, textWidth, maxVisualLines, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol)
+	}
+
+	lines := m.Lines
+	var s strings.Builder
+	visualLinesRendered := 0
 
 	startLine, startVisualOffset := m.locateVisualOffset(m.yOffset, textWidth)
 
@@ -90,82 +96,20 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 				s.WriteString(borderStyle.Render("│"))
 			}
 			if m.Config.LineNumbers {
+				ln := fmt.Sprintf(" %3d ", lineNum+1)
 				if isFirst {
-					ln := fmt.Sprintf(" %3d ", lineNum+1)
 					s.WriteString(lineNumStyle.Render(ln))
 				} else {
-					s.WriteString(lineNumStyle.Render("      "))
+					s.WriteString(lineNumStyle.Render(strings.Repeat(" ", len(ln))))
 				}
 			}
 
-			syntaxStyles := GetLineStyles(m.Lines[lineNum], m.FileName)
+			syntaxStyles := m.getStylesForLine(lineNum)
 
 			for i := startIdx; i < endIdx; i++ {
 				ch := runes[i]
-				var style lipgloss.Style
-				applyStyle := false
-
-				if i < len(syntaxStyles) {
-					style = syntaxStyles[i]
-					applyStyle = true
-				}
-
-				if len(m.searchResults) > 0 {
-					for _, result := range m.searchResults {
-						if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
-							style = styleSearch
-							applyStyle = true
-							break
-						}
-					}
-				}
-
-				if m.selecting {
-					isSelected := false
-					if lineNum > selStartRow && lineNum < selEndRow {
-						isSelected = true
-					} else if lineNum == selStartRow && lineNum == selEndRow {
-						if i >= selStartCol && i < selEndCol {
-							isSelected = true
-						}
-					} else if lineNum == selStartRow {
-						if i >= selStartCol {
-							isSelected = true
-						}
-					} else if lineNum == selEndRow {
-						if i < selEndCol {
-							isSelected = true
-						}
-					}
-					if isSelected {
-						style = styleSelected
-						applyStyle = true
-					}
-				}
-
-				if lineNum == cursorRow && i == cursorCol {
-					style = styleCursor
-					applyStyle = true
-				}
-
-				visualChar := string(ch)
-				if ch == '\t' {
-					visualChar = strings.Repeat(" ", m.Config.TabWidth)
-				}
-
-				if applyStyle {
-					if !m.selecting && lineNum == cursorRow && i == cursorCol {
-						if ch == '\t' {
-							s.WriteString(styleCursor.Render(" ") + strings.Repeat(" ", m.Config.TabWidth-1))
-						} else {
-							s.WriteString(styleCursor.Render(visualChar))
-						}
-					} else {
-						s.WriteString(style.Render(visualChar))
-					}
-				} else {
-					s.WriteString(visualChar)
-				}
+				style, applyStyle := m.resolveCharStyle(lineNum, i, syntaxStyles, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol)
+				m.writeStyledChar(&s, ch, lineNum, i, cursorRow, cursorCol, style, applyStyle)
 			}
 
 			if !m.selecting && lineNum == cursorRow && cursorCol == len(runes) && endIdx == len(runes) {
@@ -209,4 +153,199 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 	}
 
 	return s.String()
+}
+
+func (m Model) viewEditorNoWrap(
+	cfg editorViewConfig,
+	textWidth int,
+	maxVisualLines int,
+	selStartRow, selStartCol, selEndRow, selEndCol int,
+	cursorRow, cursorCol int,
+) string {
+	lines := m.Lines
+	var s strings.Builder
+
+	startLine := m.yOffset
+	if startLine < 0 {
+		startLine = 0
+	}
+	if startLine >= len(lines) {
+		startLine = len(lines) - 1
+	}
+
+	xOff := m.xOffset
+	if xOff < 0 {
+		xOff = 0
+	}
+	tabWidth := m.Config.TabWidth
+	if tabWidth < 1 {
+		tabWidth = 4
+	}
+
+	rendered := 0
+	for lineNum := startLine; lineNum < len(lines) && rendered < maxVisualLines; lineNum++ {
+		if !cfg.hideLeftBorder {
+			s.WriteString(borderStyle.Render("│"))
+		}
+		if m.Config.LineNumbers {
+			ln := fmt.Sprintf(" %3d ", lineNum+1)
+			s.WriteString(lineNumStyle.Render(ln))
+		}
+
+		lineRunes := []rune(lines[lineNum])
+		syntaxStyles := m.getStylesForLine(lineNum)
+
+		visCol := 0
+		drawn := 0
+		for i := 0; i < len(lineRunes); i++ {
+			ch := lineRunes[i]
+			charWidth := 1
+			if ch == '\t' {
+				charWidth = tabWidth
+			}
+
+			charEnd := visCol + charWidth
+			if charEnd <= xOff {
+				visCol = charEnd
+				continue
+			}
+			if drawn >= textWidth {
+				visCol = charEnd
+				break
+			}
+
+			style, applyStyle := m.resolveCharStyle(lineNum, i, syntaxStyles, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol)
+
+			if ch == '\t' {
+				// Compute only the visible slice of expanded tab spaces
+				visStart := visCol
+				if visStart < xOff {
+					visStart = xOff
+				}
+				visEnd := charEnd
+				if visEnd > xOff+textWidth {
+					visEnd = xOff + textWidth
+				}
+				sliceLen := visEnd - visStart
+				if sliceLen > 0 {
+					isCursorStart := !m.selecting && lineNum == cursorRow && i == cursorCol && visStart == visCol
+					if applyStyle {
+						if isCursorStart {
+							s.WriteString(styleCursor.Render(" "))
+							if sliceLen > 1 {
+								s.WriteString(strings.Repeat(" ", sliceLen-1))
+							}
+						} else {
+							s.WriteString(style.Render(strings.Repeat(" ", sliceLen)))
+						}
+					} else {
+						s.WriteString(strings.Repeat(" ", sliceLen))
+					}
+					drawn += sliceLen
+				}
+			} else {
+				m.writeStyledChar(&s, ch, lineNum, i, cursorRow, cursorCol, style, applyStyle)
+				drawn++
+			}
+
+			visCol = charEnd
+		}
+
+		if !m.selecting && lineNum == cursorRow && cursorCol == len(lineRunes) {
+			eolCol := cursorVisualCol(lines[lineNum], len(lineRunes), tabWidth)
+			if eolCol >= xOff && eolCol < xOff+textWidth {
+				s.WriteString(styleCursor.Render(" "))
+			}
+		}
+
+		s.WriteString("\x1b[K")
+		rendered++
+		if rendered < maxVisualLines {
+			s.WriteString("\n")
+		}
+	}
+
+	return s.String()
+}
+
+func (m Model) resolveCharStyle(
+	lineNum, i int,
+	syntaxStyles []lipgloss.Style,
+	selStartRow, selStartCol, selEndRow, selEndCol int,
+	cursorRow, cursorCol int,
+) (lipgloss.Style, bool) {
+	var style lipgloss.Style
+	applyStyle := false
+
+	if i < len(syntaxStyles) {
+		style = syntaxStyles[i]
+		applyStyle = true
+	}
+
+	if len(m.searchResults) > 0 {
+		for _, result := range m.searchResults {
+			if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
+				style = styleSearch
+				applyStyle = true
+				break
+			}
+		}
+	}
+
+	if m.selecting {
+		isSelected := false
+		if lineNum > selStartRow && lineNum < selEndRow {
+			isSelected = true
+		} else if lineNum == selStartRow && lineNum == selEndRow {
+			if i >= selStartCol && i < selEndCol {
+				isSelected = true
+			}
+		} else if lineNum == selStartRow {
+			if i >= selStartCol {
+				isSelected = true
+			}
+		} else if lineNum == selEndRow {
+			if i < selEndCol {
+				isSelected = true
+			}
+		}
+		if isSelected {
+			style = styleSelected
+			applyStyle = true
+		}
+	}
+
+	if lineNum == cursorRow && i == cursorCol {
+		style = styleCursor
+		applyStyle = true
+	}
+
+	return style, applyStyle
+}
+
+func (m Model) writeStyledChar(
+	s *strings.Builder,
+	ch rune,
+	lineNum, i, cursorRow, cursorCol int,
+	style lipgloss.Style,
+	applyStyle bool,
+) {
+	visualChar := string(ch)
+	if ch == '\t' {
+		visualChar = strings.Repeat(" ", m.Config.TabWidth)
+	}
+
+	if applyStyle {
+		if !m.selecting && lineNum == cursorRow && i == cursorCol {
+			if ch == '\t' {
+				s.WriteString(styleCursor.Render(" ") + strings.Repeat(" ", m.Config.TabWidth-1))
+			} else {
+				s.WriteString(styleCursor.Render(visualChar))
+			}
+		} else {
+			s.WriteString(style.Render(visualChar))
+		}
+	} else {
+		s.WriteString(visualChar)
+	}
 }

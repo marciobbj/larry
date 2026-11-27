@@ -34,6 +34,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case key.Matches(msg, m.KeyMap.ToggleWordWrap):
+		m.Config.WordWrap = !m.Config.WordWrap
+		m.xOffset = 0
+		m.invalidateVisualCache()
+		if m.Config.WordWrap {
+			m.statusMsg = "Word wrap: ON"
+		} else {
+			m.statusMsg = "Word wrap: OFF"
+		}
+		m = m.updateViewport()
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.ToggleHelp):
 		m.showHelp = !m.showHelp
 		return m, nil

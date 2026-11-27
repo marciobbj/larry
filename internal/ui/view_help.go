@@ -42,6 +42,7 @@ func (m Model) viewHelpMenu(base string) string {
 		{leader + "+v", "Paste"},
 		{leader + "+x", "Cut"},
 		{leader + "+a", "Select All"},
+		{leader + "+l", "Toggle Word Wrap"},
 		{leader + "+u", "Markdown Preview"},
 	}
 
