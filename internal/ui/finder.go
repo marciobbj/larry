@@ -6,6 +6,7 @@ import (
 	"larry/internal/search"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -21,7 +22,10 @@ const (
 	FinderModeGrep
 )
 
-const finderMaxResults = 100
+const (
+	finderMaxResults  = 100
+	grepDebounceDelay = 60 * time.Millisecond
+)
 
 type FinderModel struct {
 	textInput      textinput.Model
@@ -99,6 +103,10 @@ type searchMsg struct {
 	results []search.FinderResult
 }
 
+type grepDebounceMsg struct {
+	seq int
+}
+
 func (m FinderModel) Update(msg tea.Msg) (FinderModel, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -107,6 +115,12 @@ func (m FinderModel) Update(msg tea.Msg) (FinderModel, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+
+	case grepDebounceMsg:
+		if msg.seq != m.searchSeq || m.mode != FinderModeGrep {
+			return m, nil
+		}
+		return m, m.launchGrepSearch(msg.seq)
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -119,7 +133,7 @@ func (m FinderModel) Update(msg tea.Msg) (FinderModel, tea.Cmd) {
 				m.textInput.Placeholder = "Search files by name..."
 			}
 			m.cursor = 0
-			return m, m.performSearch()
+			return m, m.performSearchImmediate()
 
 		case "up", "ctrl+k":
 			if m.cursor > 0 {
@@ -206,6 +220,14 @@ func (m *FinderModel) filterFilesSync() {
 }
 
 func (m *FinderModel) performSearch() tea.Cmd {
+	return m.runSearch(true)
+}
+
+func (m *FinderModel) performSearchImmediate() tea.Cmd {
+	return m.runSearch(false)
+}
+
+func (m *FinderModel) runSearch(debounceGrep bool) tea.Cmd {
 	m.Cancel()
 	m.searchSeq++
 	seq := m.searchSeq
@@ -218,7 +240,57 @@ func (m *FinderModel) performSearch() tea.Cmd {
 		return nil
 	}
 
-	if m.mode == FinderModeGrep && query == "" {
+	if m.mode == FinderModeGrep {
+		if strings.TrimSpace(query) == "" {
+			m.results = nil
+			m.loading = false
+			return nil
+		}
+		if debounceGrep {
+			m.loading = true
+			return tea.Tick(grepDebounceDelay, func(time.Time) tea.Msg {
+				return grepDebounceMsg{seq: seq}
+			})
+		}
+		return m.launchGrepSearch(seq)
+	}
+
+	m.loading = true
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelSearch = cancel
+
+	root := m.root
+	scanner := m.scanner
+	matcher := m.matcher
+
+	return func() tea.Msg {
+		files, err := scanner.ScanPathsFast(ctx, root)
+		if err != nil && len(files) == 0 {
+			files = []string{}
+		}
+		results := make([]search.FinderResult, 0, minInt(len(files), finderMaxResults))
+		for _, f := range files {
+			if ctx.Err() != nil {
+				return searchMsg{seq: seq, files: files}
+			}
+			if matched, _ := matcher.Match(query, f); matched {
+				results = append(results, search.FinderResult{
+					File: &search.FileResult{Path: f},
+					Mode: search.ModeFiles,
+				})
+				if len(results) >= finderMaxResults {
+					break
+				}
+			}
+		}
+		return searchMsg{seq: seq, files: files, results: results}
+	}
+}
+
+func (m *FinderModel) launchGrepSearch(seq int) tea.Cmd {
+	m.Cancel()
+	query := m.textInput.Value()
+	if strings.TrimSpace(query) == "" {
 		m.results = nil
 		m.loading = false
 		return nil
@@ -228,46 +300,11 @@ func (m *FinderModel) performSearch() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelSearch = cancel
 
-	mode := m.mode
 	root := m.root
-	scanner := m.scanner
-	matcher := m.matcher
 	grep := m.grep
-	cachedFiles := m.allFiles
-	hasCache := m.allFilesLoaded
 
 	return func() tea.Msg {
-		var scanned []string
-		files := cachedFiles
-		if !hasCache {
-			var err error
-			files, err = scanner.ScanPaths(root)
-			if err != nil {
-				files = []string{}
-			}
-			scanned = files
-		}
-
-		if mode == FinderModeFile {
-			results := make([]search.FinderResult, 0, minInt(len(files), finderMaxResults))
-			for _, f := range files {
-				if ctx.Err() != nil {
-					return searchMsg{seq: seq, files: scanned}
-				}
-				if matched, _ := matcher.Match(query, f); matched {
-					results = append(results, search.FinderResult{
-						File: &search.FileResult{Path: f},
-						Mode: search.ModeFiles,
-					})
-					if len(results) >= finderMaxResults {
-						break
-					}
-				}
-			}
-			return searchMsg{seq: seq, files: scanned, results: results}
-		}
-
-		grepResults, _ := grep.SearchFiles(ctx, files, query, finderMaxResults)
+		grepResults, _ := grep.SearchContext(ctx, root, query, finderMaxResults)
 		finderResults := make([]search.FinderResult, 0, len(grepResults))
 		for i := range grepResults {
 			finderResults = append(finderResults, search.FinderResult{
@@ -275,7 +312,7 @@ func (m *FinderModel) performSearch() tea.Cmd {
 				Mode: search.ModeGrep,
 			})
 		}
-		return searchMsg{seq: seq, files: scanned, results: finderResults}
+		return searchMsg{seq: seq, results: finderResults}
 	}
 }
 

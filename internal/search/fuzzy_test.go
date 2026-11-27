@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -86,5 +87,56 @@ another line`
 		t.Errorf("expected 1 result, got %d", len(results))
 	} else if results[0].Line != 2 {
 		t.Errorf("expected line 2, got %d", results[0].Line)
+	}
+}
+
+func TestLiveGrepSearchContextAndPureGoFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Hidden dir must be skipped
+	hiddenDir := filepath.Join(tmpDir, ".hidden")
+	if err := os.MkdirAll(hiddenDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hiddenDir, "secret.txt"), []byte("needle hidden\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Binary file must be skipped
+	binFile := filepath.Join(tmpDir, "data.bin")
+	if err := os.WriteFile(binFile, []byte("needle\x00binary\x00data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Normal file with multiple matches including uppercase (smart-case check)
+	srcFile := filepath.Join(tmpDir, "app.go")
+	src := "line one\nNeedle two\nline three\nneedle four\nneedle five\n"
+	if err := os.WriteFile(srcFile, []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	lg := NewLiveGrep()
+
+	// Test SearchContext (uses ripgrep when installed) with maxResults cap = 2
+	res, err := lg.SearchContext(context.Background(), tmpDir, "needle", 2)
+	if err != nil {
+		t.Fatalf("SearchContext error: %v", err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("expected 2 capped results from SearchContext, got %d: %+v", len(res), res)
+	}
+
+	// Test pure-Go SearchFiles fallback directly (including binary filtering & smart-case)
+	goRes, err := lg.SearchFiles(context.Background(), []string{binFile, srcFile}, "needle", 2)
+	if err != nil {
+		t.Fatalf("SearchFiles error: %v", err)
+	}
+	if len(goRes) != 2 {
+		t.Fatalf("expected 2 capped results from SearchFiles, got %d: %+v", len(goRes), goRes)
+	}
+	for _, r := range goRes {
+		if r.Path != srcFile {
+			t.Fatalf("expected only srcFile match, got %q", r.Path)
+		}
 	}
 }
