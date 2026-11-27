@@ -127,10 +127,54 @@ func (m *Manager) HandleAsyncEvent(api EditorAPI, evt AsyncEvent) {
 	})
 }
 
-// LoadAll discovers and executes all enabled plugins in pluginsDir.
-// Supported layouts:
-//   - <pluginsDir>/<name>/init.lua
-//   - <pluginsDir>/<name>.lua
+// PluginsDir returns the fixed plugins directory watched by this manager.
+func (m *Manager) PluginsDir() string {
+	if m == nil {
+		return ""
+	}
+	return m.pluginsDir
+}
+
+// StartupNotice returns a concise user-facing notification summarizing the
+// plugin initialization outcome at startup or reload.
+func (m *Manager) StartupNotice() string {
+	if m == nil || !m.cfg.Plugins.IsEnabled() {
+		return "Plugins disabled"
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loaded := 0
+	failed := 0
+	for _, p := range m.plugins {
+		if p.Loaded {
+			loaded++
+		} else if p.Err != "" {
+			failed++
+		}
+	}
+
+	if loaded == 0 && failed == 0 {
+		return "No plugins installed"
+	}
+	if failed > 0 {
+		if loaded == 1 {
+			return fmt.Sprintf("1 plugin initialized (%d failed)", failed)
+		}
+		return fmt.Sprintf("%d plugins initialized (%d failed)", loaded, failed)
+	}
+	if loaded == 1 {
+		return "1 plugin initialized"
+	}
+	return fmt.Sprintf("%d plugins initialized", loaded)
+}
+
+// LoadAll discovers and executes all enabled plugins in the fixed plugins directory.
+// Required directory structure:
+//   - <pluginsDir>/<plugin-name>/init.lua
+//
+// Hidden directories (starting with "." or "_"), loose files, and folders
+// without an init.lua entrypoint are ignored.
 func (m *Manager) LoadAll() []PluginInfo {
 	if !m.cfg.Plugins.IsEnabled() || m.pluginsDir == "" {
 		return nil
@@ -138,7 +182,9 @@ func (m *Manager) LoadAll() []PluginInfo {
 
 	entries, err := os.ReadDir(m.pluginsDir)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if os.IsNotExist(err) {
+			m.addLog(fmt.Sprintf("[plugins] plugins directory not found (%s); starting without plugins", m.pluginsDir))
+		} else {
 			m.addLog(fmt.Sprintf("[plugins] failed to read %s: %v", m.pluginsDir, err))
 		}
 		return nil
@@ -150,33 +196,22 @@ func (m *Manager) LoadAll() []PluginInfo {
 
 	for _, entry := range entries {
 		name := entry.Name()
-		if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		if !entry.IsDir() || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 			continue
 		}
 
-		var pluginName, entryFile, pluginDir string
-		if entry.IsDir() {
-			candidate := filepath.Join(m.pluginsDir, name, "init.lua")
-			if _, statErr := os.Stat(candidate); statErr != nil {
-				continue
-			}
-			pluginName = name
-			entryFile = candidate
-			pluginDir = filepath.Join(m.pluginsDir, name)
-		} else if strings.HasSuffix(name, ".lua") {
-			pluginName = strings.TrimSuffix(name, ".lua")
-			entryFile = filepath.Join(m.pluginsDir, name)
-			pluginDir = m.pluginsDir
-		} else {
+		pluginDir := filepath.Join(m.pluginsDir, name)
+		entryFile := filepath.Join(pluginDir, "init.lua")
+		if info, statErr := os.Stat(entryFile); statErr != nil || info.IsDir() {
 			continue
 		}
 
-		if m.cfg.Plugins.IsDisabled(pluginName) {
-			m.addLog(fmt.Sprintf("[plugins] skipped disabled plugin %q", pluginName))
+		if m.cfg.Plugins.IsDisabled(name) {
+			m.addLog(fmt.Sprintf("[plugins] skipped disabled plugin %q", name))
 			continue
 		}
 
-		m.LoadFile(pluginName, entryFile, pluginDir)
+		m.LoadFile(name, entryFile, pluginDir)
 	}
 
 	return m.Plugins()

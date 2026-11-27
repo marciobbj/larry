@@ -242,10 +242,14 @@ func (m Model) closeActiveTab() Model {
 
 // OpenFiles opens additional files as tabs (used for multi-file CLI startup).
 func (m *Model) OpenFiles(paths []string) {
+	initialStatus := m.statusMsg
 	for _, p := range paths {
 		if updated, err := m.openFile(p); err == nil {
 			*m = updated
 		}
+	}
+	if initialStatus != "" {
+		m.statusMsg = initialStatus
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 
 type PluginsConfig struct {
 	Enabled  *bool                     `json:"enabled,omitempty"`
-	Dir      string                    `json:"dir,omitempty"`
 	Disabled []string                  `json:"disabled,omitempty"`
 	Settings map[string]map[string]any `json:"settings,omitempty"`
 }
@@ -38,22 +37,30 @@ type Config struct {
 	Plugins     PluginsConfig `json:"plugins,omitempty"`
 }
 
-// ResolvePluginsDir returns the directory where Larry discovers Lua plugins.
-// Priority: LARRY_PLUGINS_DIR env var > cfg.Plugins.Dir > <UserConfigDir>/larry/plugins > ~/.config/larry/plugins.
-func ResolvePluginsDir(cfg Config) string {
-	if envDir := os.Getenv("LARRY_PLUGINS_DIR"); envDir != "" {
-		return envDir
+// PluginsDir returns the fixed, cross-platform directory where Larry discovers Lua plugins:
+//   - Linux:   $XDG_CONFIG_HOME/larry/plugins (default: ~/.config/larry/plugins)
+//   - macOS:   ~/Library/Application Support/larry/plugins (falls back to ~/.config/larry/plugins if present)
+//   - Windows: %AppData%\larry\plugins
+func PluginsDir() string {
+	var primary string
+	if configDir, err := os.UserConfigDir(); err == nil && configDir != "" {
+		primary = filepath.Join(configDir, "larry", "plugins")
+		if info, statErr := os.Stat(primary); statErr == nil && info.IsDir() {
+			return primary
+		}
 	}
-	if cfg.Plugins.Dir != "" {
-		return cfg.Plugins.Dir
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		fallback := filepath.Join(homeDir, ".config", "larry", "plugins")
+		if fallback != primary {
+			if info, statErr := os.Stat(fallback); statErr == nil && info.IsDir() {
+				return fallback
+			}
+		}
+		if primary == "" {
+			return fallback
+		}
 	}
-	if configDir, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(configDir, "larry", "plugins")
-	}
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(homeDir, ".config", "larry", "plugins")
-	}
-	return ""
+	return primary
 }
 
 func DefaultConfig() Config {

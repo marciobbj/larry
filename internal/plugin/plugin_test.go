@@ -189,8 +189,20 @@ func TestDiscoveryAndConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Single-file plugin: beta.lua (disabled)
-	if err := os.WriteFile(filepath.Join(dir, "beta.lua"), []byte(`larry.ui.set_status("should not load")`), 0o644); err != nil {
+	// Disabled folder plugin: beta/init.lua
+	betaDir := filepath.Join(dir, "beta")
+	if err := os.MkdirAll(betaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(betaDir, "init.lua"), []byte(`larry.ui.set_status("should not load")`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Loose file and folder without init.lua must be ignored under fixed structure
+	if err := os.WriteFile(filepath.Join(dir, "loose.lua"), []byte(`larry.ui.set_status("loose ignored")`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "empty-folder"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -210,11 +222,57 @@ func TestDiscoveryAndConfig(t *testing.T) {
 	if !loaded[0].Loaded || loaded[0].Version != "1.2.0" || loaded[0].Description != "Test alpha plugin" {
 		t.Fatalf("unexpected plugin metadata: %+v", loaded[0])
 	}
+	if got := mgr.StartupNotice(); got != "1 plugin initialized" {
+		t.Fatalf("expected startup notice '1 plugin initialized', got %q", got)
+	}
 
 	api := newMockAPI()
 	mgr.Emit(api, EventInit, nil)
 	if api.status != "alpha:ola" {
 		t.Fatalf("expected status 'alpha:ola', got %q", api.status)
+	}
+}
+
+func TestStartupNotices(t *testing.T) {
+	// Missing plugins directory -> starts cleanly with notice
+	missingDir := filepath.Join(t.TempDir(), "does-not-exist")
+	mgrMissing := NewManager(config.DefaultConfig(), missingDir)
+	defer mgrMissing.Close()
+	mgrMissing.LoadAll()
+	if got := mgrMissing.StartupNotice(); got != "No plugins installed" {
+		t.Fatalf("missing dir notice = %q, want %q", got, "No plugins installed")
+	}
+
+	// Multiple plugins with 1 error
+	dir := t.TempDir()
+	for _, name := range []string{"p1", "p2"} {
+		pDir := filepath.Join(dir, name)
+		if err := os.MkdirAll(pDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(pDir, "init.lua"), []byte(`larry.log("ok")`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mgrMulti := NewManager(config.DefaultConfig(), dir)
+	defer mgrMulti.Close()
+	mgrMulti.LoadAll()
+	if got := mgrMulti.StartupNotice(); got != "2 plugins initialized" {
+		t.Fatalf("multi notice = %q, want %q", got, "2 plugins initialized")
+	}
+
+	brokenDir := filepath.Join(dir, "broken")
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(brokenDir, "init.lua"), []byte(`this is not valid lua !!!`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mgrBroken := NewManager(config.DefaultConfig(), dir)
+	defer mgrBroken.Close()
+	mgrBroken.LoadAll()
+	if got := mgrBroken.StartupNotice(); got != "2 plugins initialized (1 failed)" {
+		t.Fatalf("broken notice = %q, want %q", got, "2 plugins initialized (1 failed)")
 	}
 }
 

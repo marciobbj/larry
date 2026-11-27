@@ -17,7 +17,6 @@ import (
 func main() {
 	configPath := flag.String("config", "", "Path to configuration file")
 	themeOverride := flag.String("theme", "", "Override color theme (e.g. omarchy, dracula, nord)")
-	pluginsDir := flag.String("plugins-dir", "", "Override Lua plugins directory")
 	noPlugins := flag.Bool("no-plugins", false, "Start Larry without loading Lua plugins")
 	showVersion := flag.Bool("version", false, "Show version information")
 	help := flag.Bool("help", false, "Show help information")
@@ -77,9 +76,6 @@ func main() {
 	if *themeOverride != "" {
 		cfg.Theme = *themeOverride
 	}
-	if *pluginsDir != "" {
-		cfg.Plugins.Dir = *pluginsDir
-	}
 	if *noPlugins {
 		disabled := false
 		cfg.Plugins.Enabled = &disabled
@@ -119,7 +115,6 @@ ARGUMENTS:
 OPTIONS:
   -config string      Path to configuration file (default: uses built-in defaults)
   -theme string       Override color theme (e.g., "omarchy", "dracula", "monokai", "nord")
-  -plugins-dir string Override Lua plugins directory (default: ~/.config/larry/plugins)
   -no-plugins         Disable Lua plugin loading (safe mode)
   -version            Show version information and exit
   -help               Show this help information

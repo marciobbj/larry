@@ -13,9 +13,46 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// isolatePluginsDir points the OS config directory to a fresh temp folder so
+// config.PluginsDir() resolves to a clean, isolated path on Linux, macOS, and Windows.
+func isolatePluginsDir(t *testing.T) string {
+	t.Helper()
+	cfgRoot := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfgRoot)
+	t.Setenv("HOME", cfgRoot)
+	t.Setenv("APPDATA", cfgRoot)
+	return config.PluginsDir()
+}
+
+func TestPluginStartupNotifications(t *testing.T) {
+	// 1. Missing plugins folder -> starts cleanly and notifies user
+	pluginsDir := isolatePluginsDir(t)
+	m := InitialModel("main.go", []string{"package main"}, config.DefaultConfig())
+	defer m.ClosePlugins()
+	if m.statusMsg != "No plugins installed" {
+		t.Fatalf("expected 'No plugins installed', got %q", m.statusMsg)
+	}
+
+	// 2. Two valid plugins in fixed <plugins-dir>/<name>/init.lua structure
+	for _, name := range []string{"alpha", "beta"} {
+		dir := filepath.Join(pluginsDir, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "init.lua"), []byte(`larry.log("loaded")`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m2 := InitialModel("main.go", []string{"package main"}, config.DefaultConfig())
+	defer m2.ClosePlugins()
+	if m2.statusMsg != "2 plugins initialized" {
+		t.Fatalf("expected '2 plugins initialized', got %q", m2.statusMsg)
+	}
+}
+
 func TestPluginAutoFormatOnSaveAndUndo(t *testing.T) {
+	pluginsDir := isolatePluginsDir(t)
 	tmpDir := t.TempDir()
-	pluginsDir := filepath.Join(tmpDir, "plugins")
 	if err := os.MkdirAll(filepath.Join(pluginsDir, "trimmer"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -51,10 +88,12 @@ func TestPluginAutoFormatOnSaveAndUndo(t *testing.T) {
 
 	targetFile := filepath.Join(tmpDir, "sample.txt")
 	cfg := config.DefaultConfig()
-	cfg.Plugins.Dir = pluginsDir
 
 	m := InitialModel(targetFile, []string{"hello   ", "world\t "}, cfg)
 	defer m.ClosePlugins()
+	if m.statusMsg != "1 plugin initialized" {
+		t.Fatalf("expected '1 plugin initialized', got %q", m.statusMsg)
+	}
 	m.Width = 100
 	m.Height = 30
 
@@ -89,9 +128,9 @@ func TestPluginAutoFormatOnSaveAndUndo(t *testing.T) {
 }
 
 func TestPluginDiagnosticsRenderAndCommandPalette(t *testing.T) {
-	tmpDir := t.TempDir()
-	pluginsDir := filepath.Join(tmpDir, "plugins")
-	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+	pluginsDir := isolatePluginsDir(t)
+	demoDir := filepath.Join(pluginsDir, "demo")
+	if err := os.MkdirAll(demoDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,12 +161,11 @@ func TestPluginDiagnosticsRenderAndCommandPalette(t *testing.T) {
 			larry.ui.show_hover("func main()", { "Entry point of the Go program." })
 		end)
 	`
-	if err := os.WriteFile(filepath.Join(pluginsDir, "demo.lua"), []byte(luaCode), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(demoDir, "init.lua"), []byte(luaCode), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	cfg := config.DefaultConfig()
-	cfg.Plugins.Dir = pluginsDir
 
 	m := InitialModel("main.go", []string{"package main", "foo()", "func main() {}"}, cfg)
 	defer m.ClosePlugins()
@@ -228,8 +266,9 @@ func TestPluginAsyncEventFlowInModel(t *testing.T) {
 }
 
 func TestGoFormatterAndAsyncLinterPluginEndToEnd(t *testing.T) {
+	pluginsRoot := isolatePluginsDir(t)
 	tmpDir := t.TempDir()
-	pluginsDir := filepath.Join(tmpDir, "plugins", "go-dev")
+	pluginsDir := filepath.Join(pluginsRoot, "go-dev")
 	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +333,6 @@ func TestGoFormatterAndAsyncLinterPluginEndToEnd(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	cfg.Plugins.Dir = filepath.Join(tmpDir, "plugins")
 
 	m := InitialModel(goFile, unformatted, cfg)
 	defer m.ClosePlugins()

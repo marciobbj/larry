@@ -464,8 +464,8 @@ func (m Model) executePaletteEntry(chosen PickerEntry) (Model, tea.Cmd) {
 		m = m.showLoadedPluginsPanel()
 	case "builtin.plugins_reload":
 		if m.plugins != nil {
-			loaded := m.plugins.Reload(m.editorAPI())
-			m.statusMsg = fmt.Sprintf("Reloaded %d plugin(s)", len(loaded))
+			m.plugins.Reload(m.editorAPI())
+			m.statusMsg = m.plugins.StartupNotice()
 		}
 	case "builtin.plugins_logs":
 		if m.plugins != nil {
@@ -547,8 +547,12 @@ func (m Model) showLoadedPluginsPanel() Model {
 	list := m.plugins.Plugins()
 	lines := make([]string, 0, len(list)+2)
 	if len(list) == 0 {
-		lines = append(lines, "No plugins loaded.")
-		lines = append(lines, "Place Lua plugins in ~/.config/larry/plugins/<name>/init.lua")
+		dir := m.plugins.PluginsDir()
+		if dir == "" {
+			dir = "~/.config/larry/plugins"
+		}
+		lines = append(lines, "No plugins installed.")
+		lines = append(lines, "Expected structure: "+filepath.Join(dir, "<plugin-name>", "init.lua"))
 	} else {
 		for _, p := range list {
 			status := "OK"

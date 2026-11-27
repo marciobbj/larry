@@ -129,10 +129,14 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 	}
 
 	var pluginMgr *plugin.Manager
+	startupStatus := ""
 	if cfg.Plugins.IsEnabled() {
-		pluginsDir := config.ResolvePluginsDir(cfg)
+		pluginsDir := config.PluginsDir()
 		pluginMgr = plugin.NewManager(cfg, pluginsDir)
 		pluginMgr.LoadAll()
+		startupStatus = pluginMgr.StartupNotice()
+	} else {
+		startupStatus = "Plugins disabled"
 	}
 
 	return Model{
@@ -145,6 +149,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		startCol:           0,
 		selecting:          false,
 		textInput:          ti,
+		statusMsg:          startupStatus,
 		saving:             false,
 		fileTree:           ft,
 		syntaxCache:        &fileSyntaxCache{},

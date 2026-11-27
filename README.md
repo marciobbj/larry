@@ -90,7 +90,6 @@ larry [OPTIONS] [FILE... | DIRECTORY]
 |------|-------------|
 | `-config <path>` | Load a custom JSON configuration file |
 | `-theme <name>` | Override the configured color theme (e.g. `omarchy`, `dracula`, `nord`, `monokai`, `github`) |
-| `-plugins-dir <path>` | Override the Lua plugins directory (default `~/.config/larry/plugins`) |
 | `-no-plugins` | Start Larry without loading Lua plugins (safe mode) |
 | `-help` | Show CLI usage and configuration help |
 
@@ -137,6 +136,7 @@ larry -config ./custom_config.json myfile.txt
 | **Indent / Dedent** | `Tab` / `Shift+Tab` |
 | **Toggle Word Wrap** | `Leader+L` |
 | **Markdown Split Preview** | `Leader+U` |
+| **Command Palette** | `Alt+P` or `F1` *(or `Ctrl+P` when `leader_key` is `alt`)* |
 | **Toggle Help Menu** | `Leader+H` |
 
 ### Tabs
@@ -225,6 +225,92 @@ Larry loads its configuration automatically from:
   keybind = ctrl+shift+arrow_right=unbind
   ```
 - **macOS Users**: Since terminals rarely forward `Cmd`, set `"leader_key": "alt"` and map Option to Alt in your terminal preferences (Ghostty, Kitty, iTerm2, Alacritty).
+
+## Lua Plugins
+
+Larry embeds a pure-Go **Lua 5.1** plugin runtime (`gopher-lua`) with native JSON-RPC 2.0 stdio LSP transport, async process execution, inline diagnostics, gutter signs, status bar badges, pickers, hover popups, split panels, and a Command Palette (`Alt+P` / `F1`).
+
+### Fixed Plugins Location (Cross-Platform)
+
+On startup, Larry always checks its fixed platform-standard plugins directory:
+
+| OS | Plugins Directory |
+|----|-------------------|
+| **Linux** | `~/.config/larry/plugins` *(or `$XDG_CONFIG_HOME/larry/plugins`)* |
+| **macOS** | `~/Library/Application Support/larry/plugins` *(falls back to `~/.config/larry/plugins` if present)* |
+| **Windows** | `%AppData%\larry\plugins` |
+
+- If the directory does not exist (or contains no valid plugins), Larry starts normally without plugins and shows **`No plugins installed`** in the status bar.
+- If valid plugins are found, Larry loads them automatically and notifies **`X plugins initialized`** (or **`1 plugin initialized`**) in the status bar.
+- Run `larry -no-plugins` to start in safe mode without loading any plugins.
+
+### Required Directory Structure
+
+Each plugin **must** live in its own subdirectory with an `init.lua` entrypoint:
+
+```text
+<plugins-dir>/
+├── go-format/
+│   └── init.lua          # required entrypoint
+└── lsp-client/
+    ├── init.lua          # required entrypoint
+    └── helpers.lua       # optional modules loaded via require("helpers")
+```
+
+Loose `.lua` files in `<plugins-dir>`, hidden directories starting with `.` or `_`, and folders without `init.lua` are ignored.
+
+### Plugin Settings in `config.json`
+
+```json
+{
+  "theme": "omarchy",
+  "plugins": {
+    "enabled": true,
+    "disabled": ["some-plugin"],
+    "settings": {
+      "go-format": {
+        "on_save": true
+      }
+    }
+  }
+}
+```
+
+### Quick Plugin Example
+
+Create `~/.config/larry/plugins/go-format/init.lua` (or the equivalent path on macOS/Windows):
+
+```lua
+larry.plugin({
+  name = "go-format",
+  version = "1.0.0",
+  description = "Format Go files with gofmt on save",
+})
+
+local cfg = larry.config("go-format")
+
+larry.on("before_save", function(ctx)
+  if cfg.on_save == false or ctx.filetype ~= "go" then
+    return
+  end
+  if not larry.exec.has("gofmt") then
+    return
+  end
+  local formatted, _, err = larry.exec.sync("gofmt", {}, { stdin = larry.buf.text() })
+  if not err and formatted ~= "" then
+    larry.buf.set_text(formatted)
+    larry.ui.set_status("Formatted with gofmt")
+  end
+end)
+```
+
+### Available `larry.*` Lua API
+
+- **Lifecycle & Config**: `larry.plugin(meta)`, `larry.config(name?)`, `larry.log(msg)`, `larry.on(event, fn)` (`init`, `file_open`, `buffer_change`, `before_save`, `after_save`, `tab_switch`, `cursor_move`, `theme_change`, `quit`)
+- **Buffer & Cursor (1-based)**: `larry.buf.{text, set_text, lines, set_lines, line, set_line, line_count, insert, delete_range, filename, filepath, filetype, modified, save}`, `larry.cursor.{get, set, selection, selected_text}`, `larry.workspace.{root, open}`
+- **Commands & Keymaps**: `larry.cmd.{register, run}`, `larry.keymap.{set, del}` *(supports `<leader>+...`)*
+- **UI & Diagnostics**: `larry.ui.{set_status, set_badge, clear_badge, show_picker, show_hover, close_hover, show_panel, close_panel, theme, palette}`, `larry.diagnostics.{set, clear, get}`, `larry.gutter.{set, clear}`
+- **External Tools & LSP**: `larry.exec.{has, sync, async}`, `larry.lsp.{start, clients, stop_all, path_to_uri, uri_to_path}` (`client:request`, `client:notify`, `client:on_notification`, `client:on_exit`, `client:stop`), `larry.timer.{after, cancel}`, `larry.json.{encode, decode}`, `larry.fs.{exists, read, join, dirname, basename}`
 
 ## Roadmap
 
