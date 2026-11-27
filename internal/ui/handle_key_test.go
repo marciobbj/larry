@@ -173,3 +173,50 @@ func TestSavePromptsForNewFile(t *testing.T) {
 		t.Fatalf("filename prompt value = %q, want empty", got.textInput.Value())
 	}
 }
+
+func TestSelectMultipleLinesWithCtrlShiftAndAltShiftArrows(t *testing.T) {
+	lines := []string{"l0", "l1", "l2", "l3", "l4", "l5", "l6", "l7"}
+
+	t.Run("ctrl+shift+down and ctrl+shift+up", func(t *testing.T) {
+		m := InitialModel("test.txt", append([]string(nil), lines...), config.DefaultConfig())
+		m.Width = 80
+		m.Height = 20
+		m.CursorRow = 0
+		m.CursorCol = 0
+
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlShiftDown})
+		got := updated.(Model)
+		if !got.selecting {
+			t.Fatal("expected Ctrl+Shift+Down to enable selection")
+		}
+		if got.startRow != 0 || got.CursorRow != JumpLineCount {
+			t.Fatalf("selection rows = (%d -> %d), want (0 -> %d)", got.startRow, got.CursorRow, JumpLineCount)
+		}
+
+		updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyCtrlShiftUp})
+		got = updated.(Model)
+		if !got.selecting {
+			t.Fatal("expected Ctrl+Shift+Up to keep selection active")
+		}
+		if got.CursorRow != 0 {
+			t.Fatalf("cursor row after Ctrl+Shift+Up = %d, want 0", got.CursorRow)
+		}
+	})
+
+	t.Run("alt+shift+down fallback", func(t *testing.T) {
+		m := InitialModel("test.txt", append([]string(nil), lines...), config.DefaultConfig())
+		m.Width = 80
+		m.Height = 20
+		m.CursorRow = 1
+		m.CursorCol = 0
+
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyShiftDown, Alt: true})
+		got := updated.(Model)
+		if !got.selecting {
+			t.Fatal("expected Alt+Shift+Down to enable selection")
+		}
+		if got.startRow != 1 || got.CursorRow != 1+JumpLineCount {
+			t.Fatalf("selection rows = (%d -> %d), want (1 -> %d)", got.startRow, got.CursorRow, 1+JumpLineCount)
+		}
+	})
+}
