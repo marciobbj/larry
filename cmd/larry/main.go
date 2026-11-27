@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
-	"golang.design/x/clipboard"
 	"larry/internal/config"
 	"larry/internal/ui"
 	"os"
@@ -29,11 +28,6 @@ func main() {
 	if *help {
 		showHelp()
 		return
-	}
-
-	err := clipboard.Init()
-	if err != nil {
-		fmt.Printf("Warning: Could not initialize clipboard: %v\n", err)
 	}
 
 	filename := ""

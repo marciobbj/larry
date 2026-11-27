@@ -18,6 +18,8 @@ jobs:
   test:
     name: Test & Vet
     runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

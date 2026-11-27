@@ -1,16 +1,16 @@
-<div align="center">
-
 ```text
-                 /\_/\
-                ( o.o )
-                 > ^ <
+                                     /\_/\
+                                    ( o.o )
+                                     > ^ <
 
-██       █████  ██████  ██████  ██    ██
-██      ██   ██ ██   ██ ██   ██  ██  ██
-██      ███████ ██████  ██████    ████
-██      ██   ██ ██   ██ ██   ██    ██
-███████ ██   ██ ██   ██ ██   ██    ██
+                    ██       █████  ██████  ██████  ██    ██
+                    ██      ██   ██ ██   ██ ██   ██  ██  ██
+                    ██      ███████ ██████  ██████    ████
+                    ██      ██   ██ ██   ██ ██   ██    ██
+                    ███████ ██   ██ ██   ██ ██   ██    ██
 ```
+
+<div align="center">
 
 **A minimalist, high-performance TUI text editor written in Go.**<br />
 *More power than Nano, without the steep learning curve of Vim — made for humans.*
