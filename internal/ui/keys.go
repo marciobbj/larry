@@ -53,6 +53,7 @@ type KeyMap struct {
 	SelectAllOccurrences  key.Binding
 	AddCursorUp           key.Binding
 	AddCursorDown         key.Binding
+	CommandPalette        key.Binding
 }
 
 func NewKeyMap(leader string) KeyMap {
@@ -60,11 +61,13 @@ func NewKeyMap(leader string) KeyMap {
 	nextTabKeys := []string{"alt+]"}
 	addCursorUpKeys := []string{"alt+up"}
 	addCursorDownKeys := []string{"alt+down"}
+	paletteKeys := []string{"alt+p", "f1"}
 	if leader == "alt" {
 		prevTabKeys = append(prevTabKeys, "ctrl+left")
 		nextTabKeys = append(nextTabKeys, "ctrl+right")
 		addCursorUpKeys = []string{"ctrl+up"}
 		addCursorDownKeys = []string{"ctrl+down"}
+		paletteKeys = []string{"ctrl+p", "f1"}
 	} else {
 		prevTabKeys = append(prevTabKeys, "alt+left")
 		nextTabKeys = append(nextTabKeys, "alt+right")
@@ -121,6 +124,7 @@ func NewKeyMap(leader string) KeyMap {
 		SelectAllOccurrences:  key.NewBinding(key.WithKeys(leader+"+b", "alt+I")),
 		AddCursorUp:           key.NewBinding(key.WithKeys(addCursorUpKeys...)),
 		AddCursorDown:         key.NewBinding(key.WithKeys(addCursorDownKeys...)),
+		CommandPalette:        key.NewBinding(key.WithKeys(paletteKeys...)),
 	}
 }
 

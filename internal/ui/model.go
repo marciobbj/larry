@@ -10,6 +10,7 @@ import (
 
 	"larry/internal/config"
 	"larry/internal/git"
+	"larry/internal/plugin"
 	"larry/internal/search"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -89,6 +90,14 @@ type Model struct {
 	showWelcome        bool
 	tabs               []EditorTab
 	activeTab          int
+	plugins            *plugin.Manager
+	pickerActive       bool
+	picker             PickerModal
+	pluginHover        HoverState
+	pluginPanel        PanelState
+	bufferChangeSeq    int
+	lastModifiedVer    int
+	lastCursorRow      int
 }
 
 func isMarkdownFile(filename string) bool {
@@ -119,6 +128,17 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		ViewMode: ViewModeEditor,
 	}
 
+	var pluginMgr *plugin.Manager
+	startupStatus := ""
+	if cfg.Plugins.IsEnabled() {
+		pluginsDir := config.PluginsDir()
+		pluginMgr = plugin.NewManager(cfg, pluginsDir)
+		pluginMgr.LoadAll()
+		startupStatus = pluginMgr.StartupNotice()
+	} else {
+		startupStatus = "Plugins disabled"
+	}
+
 	return Model{
 		Width:              80,
 		Height:             20,
@@ -129,6 +149,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		startCol:           0,
 		selecting:          false,
 		textInput:          ti,
+		statusMsg:          startupStatus,
 		saving:             false,
 		fileTree:           ft,
 		syntaxCache:        &fileSyntaxCache{},
@@ -154,6 +175,28 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		showWelcome:        filename == "",
 		tabs:               []EditorTab{initialTab},
 		activeTab:          0,
+		plugins:            pluginMgr,
+	}
+}
+
+// Plugins returns the active Lua plugin manager (may be nil if plugins are disabled).
+func (m *Model) Plugins() *plugin.Manager {
+	return m.plugins
+}
+
+// SetPluginManager replaces the active plugin manager (useful for tests or custom setups).
+func (m *Model) SetPluginManager(mgr *plugin.Manager) {
+	if m.plugins != nil && m.plugins != mgr {
+		m.plugins.Close()
+	}
+	m.plugins = mgr
+}
+
+// ClosePlugins cleanly terminates any running plugin resources (LSP servers, timers, VM).
+func (m *Model) ClosePlugins() {
+	if m.plugins != nil {
+		m.plugins.Emit(m.editorAPI(), plugin.EventQuit, nil)
+		m.plugins.Close()
 	}
 }
 
@@ -219,6 +262,9 @@ func (m Model) openFile(path string) (Model, error) {
 	m.showWelcome = false
 	m = m.loadTabState(m.activeTab)
 	m.statusMsg = "Opened: " + displayPath
+	if m.plugins != nil {
+		m.plugins.Emit(m.editorAPI(), plugin.EventFileOpen, nil)
+	}
 	return m, nil
 }
 
@@ -299,7 +345,12 @@ func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.KeyMap.Quit):
 		m.Quitting = true
+		m.ClosePlugins()
 		return m, tea.Quit
+
+	case key.Matches(msg, m.KeyMap.CommandPalette):
+		m = m.openCommandPalette()
+		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Open):
 		m = m.toggleFileTree()
@@ -570,13 +621,40 @@ func (m *Model) invalidateGitCache() {
 }
 
 func (m Model) Init() tea.Cmd {
+	var cmds []tea.Cmd
 	if isOmarchyThemeName(m.Config.Theme) {
-		return omarchyWatchTickCmd()
+		cmds = append(cmds, omarchyWatchTickCmd())
 	}
-	return nil
+	if m.plugins != nil {
+		m.plugins.Emit(m.editorAPI(), plugin.EventInit, nil)
+		if m.FileName != "" {
+			m.plugins.Emit(m.editorAPI(), plugin.EventFileOpen, nil)
+		}
+		cmds = append(cmds, waitPluginAsyncCmd(m.plugins))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if evtMsg, ok := msg.(pluginAsyncEventMsg); ok {
+		if m.plugins != nil {
+			m.plugins.HandleAsyncEvent(m.editorAPI(), evtMsg.evt)
+			m = m.updateViewport()
+			return m, waitPluginAsyncCmd(m.plugins)
+		}
+		return m, nil
+	}
+
+	if debMsg, ok := msg.(pluginBufferDebounceMsg); ok {
+		if m.plugins != nil && debMsg.seq == m.bufferChangeSeq {
+			m.plugins.Emit(m.editorAPI(), plugin.EventBufferChange, nil)
+		}
+		return m, nil
+	}
+
 	if _, ok := msg.(omarchyThemeTickMsg); ok {
 		if isOmarchyThemeName(m.Config.Theme) {
 			path := ResolveOmarchyColorsPath()
@@ -588,10 +666,84 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.markdownRenderer = nil
 				m.markdownCacheValid = false
 				m = m.syncMarkdownForLayout()
+				if m.plugins != nil {
+					m.plugins.Emit(m.editorAPI(), plugin.EventThemeChange, map[string]any{"theme": m.Config.Theme})
+				}
 			}
 			return m, omarchyWatchTickCmd()
 		}
 		return m, nil
+	}
+
+	if m.pickerActive {
+		if ws, ok := msg.(tea.WindowSizeMsg); ok {
+			m.Width = ws.Width
+			m.Height = ws.Height
+			m.fileTree.Height = m.workspaceHeight()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		var chosen *PickerEntry
+		var closed bool
+		m.picker, cmd, chosen, closed = m.picker.Update(msg)
+		if closed {
+			m.pickerActive = false
+			if chosen != nil {
+				if m.picker.IsPalette {
+					return m.executePaletteEntry(*chosen)
+				}
+				if m.picker.OnSelect != nil {
+					m.picker.OnSelect(*chosen)
+					return m.updateViewport(), nil
+				}
+				if chosen.Path != "" {
+					if updated, err := m.openFile(chosen.Path); err == nil {
+						m = updated
+						m.CursorRow = clampInt(chosen.Line, 0, len(m.Lines)-1)
+						m.CursorCol = clampInt(chosen.Col, 0, lineRuneLen(m.Lines, m.CursorRow))
+						m.fileTree.Focused = false
+						m = m.updateViewport()
+					}
+				}
+			}
+			return m, nil
+		}
+		return m, cmd
+	}
+
+	if m.pluginHover.Visible {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.Type {
+			case tea.KeyEsc:
+				m.pluginHover.Visible = false
+				return m, nil
+			case tea.KeyUp:
+				if m.pluginHover.Scroll > 0 {
+					m.pluginHover.Scroll--
+				}
+				return m, nil
+			case tea.KeyDown:
+				m.pluginHover.Scroll++
+				return m, nil
+			default:
+				if km.String() == "k" {
+					if m.pluginHover.Scroll > 0 {
+						m.pluginHover.Scroll--
+					}
+					return m, nil
+				}
+				if km.String() == "j" {
+					m.pluginHover.Scroll++
+					return m, nil
+				}
+				if km.String() == "q" {
+					m.pluginHover.Visible = false
+					return m, nil
+				}
+				// Any other key dismisses hover and proceeds normally.
+				m.pluginHover.Visible = false
+			}
+		}
 	}
 
 	if m.globalReplacing {
@@ -701,19 +853,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if filename == "" {
 					filename = "untitled.txt"
 				}
-				content := strings.Join(m.Lines, "\n")
-				err := os.WriteFile(filename, []byte(content), 0644)
-				if err != nil {
-					m.statusMsg = "Error saving: " + err.Error()
-				} else {
-					m.statusMsg = "Saved: " + filename
-					m.FileName = filename
-					m.Modified = false
-					m.saveActiveTabState()
-					m.invalidateGitCache()
-					m.fileTree.Rebuild()
-					m.fileTree.SetActiveFile(filename)
-				}
+				m, _ = m.saveCurrentFile(filename)
+				m.fileTree.Rebuild()
 				m.saving = false
 				return m, nil
 			}
@@ -993,17 +1134,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			!key.Matches(msg, m.KeyMap.ToggleHelp) &&
 			!key.Matches(msg, m.KeyMap.GlobalFinder) &&
 			!key.Matches(msg, m.KeyMap.GlobalReplace) &&
+			!key.Matches(msg, m.KeyMap.CommandPalette) &&
 			!key.Matches(msg, m.KeyMap.Quit) {
 			m.showWelcome = false
 		}
 
+		prevVer := m.visualLineVersion
+		prevRow := m.CursorRow
+
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
+
+		var extraCmds []tea.Cmd
 		if cmd != nil {
-			return m, cmd
+			extraCmds = append(extraCmds, cmd)
 		}
+		if m.plugins != nil && !m.Quitting {
+			if m.visualLineVersion != prevVer {
+				m.bufferChangeSeq++
+				extraCmds = append(extraCmds, bufferChangeDebounceCmd(m.bufferChangeSeq))
+			}
+			if m.CursorRow != prevRow {
+				m.lastCursorRow = m.CursorRow
+				m.plugins.Emit(m.editorAPI(), plugin.EventCursorMove, nil)
+			}
+		}
+
 		m = m.updateViewport()
-		return m, cmd
+		if len(extraCmds) == 0 {
+			return m, nil
+		}
+		if len(extraCmds) == 1 {
+			return m, extraCmds[0]
+		}
+		return m, tea.Batch(extraCmds...)
 
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
@@ -1085,6 +1249,14 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.pickerActive {
+		return m.picker.Render(m.Width, m.Height)
+	}
+
+	if m.pluginHover.Visible {
+		return m.pluginHover.Render(m.Width, m.Height)
+	}
+
 	if m.showHelp {
 		return m.viewHelpMenu("")
 	}
@@ -1102,7 +1274,9 @@ func (m Model) View() string {
 		mainView = m.viewWelcome()
 	} else {
 		var editorArea string
-		if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
+		if m.pluginPanel.Visible {
+			editorArea = m.viewWithPluginPanel()
+		} else if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
 			editorArea = m.viewSplit()
 		} else if len(m.Lines) == 0 {
 			s := strings.Builder{}

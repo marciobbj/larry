@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"larry/internal/plugin"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -95,6 +97,35 @@ func (m Model) renderStatusBar() string {
 			Render(fmt.Sprintf("%d cursors", len(m.allCursors())))
 		fileSection += cursorBadge
 	}
+	if m.plugins != nil {
+		if m.FileName != "" {
+			errs, warns := m.plugins.DiagnosticCounts(normalizeAbsPath(m.FileName))
+			if errs > 0 {
+				fileSection += lipgloss.NewStyle().
+					Background(barBg).
+					Foreground(p.Red).
+					Bold(true).
+					Padding(0, 1).
+					Render(fmt.Sprintf("● %d", errs))
+			}
+			if warns > 0 {
+				fileSection += lipgloss.NewStyle().
+					Background(barBg).
+					Foreground(p.Yellow).
+					Bold(true).
+					Padding(0, 1).
+					Render(fmt.Sprintf("▲ %d", warns))
+			}
+		}
+		for _, badge := range m.plugins.Badges() {
+			fileSection += lipgloss.NewStyle().
+				Background(barBg).
+				Foreground(paletteColorByName(badge.Color)).
+				Bold(true).
+				Padding(0, 1).
+				Render(badge.Text)
+		}
+	}
 
 	// ── If there's a custom status message, show it simply ──
 	if m.statusMsg != "" {
@@ -108,6 +139,40 @@ func (m Model) renderStatusBar() string {
 			gap = 0
 		}
 		return barStyle.Render(fileSection + spacerStyle.Render(strings.Repeat(" ", gap)) + msgRendered)
+	}
+
+	// ── If cursor is on a line with a diagnostic, surface its message cleanly ──
+	if m.plugins != nil && m.FileName != "" {
+		if lineDiags := m.plugins.DiagnosticsByLine(normalizeAbsPath(m.FileName))[m.CursorRow]; len(lineDiags) > 0 {
+			d := lineDiags[0]
+			diagColor := p.Cyan
+			prefix := "ℹ "
+			switch d.Severity {
+			case plugin.SeverityError:
+				diagColor = p.Red
+				prefix = "● "
+			case plugin.SeverityWarning:
+				diagColor = p.Yellow
+				prefix = "▲ "
+			}
+			label := prefix + d.Message
+			if d.Source != "" {
+				label += " [" + d.Source + "]"
+			}
+			avail := width - lipgloss.Width(fileSection) - 3
+			if avail > 10 {
+				msgRendered := lipgloss.NewStyle().
+					Foreground(diagColor).
+					Background(barBg).
+					Padding(0, 1).
+					Render(truncateDisplay(label, avail))
+				gap := width - lipgloss.Width(fileSection) - lipgloss.Width(msgRendered)
+				if gap < 0 {
+					gap = 0
+				}
+				return barStyle.Render(fileSection + spacerStyle.Render(strings.Repeat(" ", gap)) + msgRendered)
+			}
+		}
 	}
 
 	// ── Shortcuts section ──

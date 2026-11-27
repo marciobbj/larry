@@ -13,6 +13,7 @@ const (
 	OpInsert OpType = iota
 	OpDelete
 	OpMultiEdit
+	OpReplaceAll
 )
 
 type EditOp struct {
@@ -23,6 +24,12 @@ type EditOp struct {
 	RangeEdits    []RangeEdit
 	BeforeCursors []CursorSelection
 	AfterCursors  []CursorSelection
+	BeforeLines   []string
+	AfterLines    []string
+	BeforeRow     int
+	BeforeCol     int
+	AfterRow      int
+	AfterCol      int
 }
 
 var writeClipboard = func(m Model, text string) error {
@@ -314,6 +321,17 @@ func (m Model) undo() Model {
 		}
 		m.setAllCursors(cloneCursors(op.BeforeCursors))
 		m.markModified()
+
+	case OpReplaceAll:
+		m.Lines = append([]string(nil), op.BeforeLines...)
+		if len(m.Lines) == 0 {
+			m.Lines = []string{""}
+		}
+		m.CursorRow = clampInt(op.BeforeRow, 0, len(m.Lines)-1)
+		m.CursorCol = clampInt(op.BeforeCol, 0, lineRuneLen(m.Lines, m.CursorRow))
+		m.selecting = false
+		m.clearExtraCursors()
+		m.markModified()
 	}
 
 	m.RedoStack = append(m.RedoStack, op)
@@ -356,6 +374,17 @@ func (m Model) redo() Model {
 			applyRangeReplace(&m.Lines, e.StartRow, e.StartCol, e.EndRow, e.EndCol, e.NewText)
 		}
 		m.setAllCursors(cloneCursors(op.AfterCursors))
+		m.markModified()
+
+	case OpReplaceAll:
+		m.Lines = append([]string(nil), op.AfterLines...)
+		if len(m.Lines) == 0 {
+			m.Lines = []string{""}
+		}
+		m.CursorRow = clampInt(op.AfterRow, 0, len(m.Lines)-1)
+		m.CursorCol = clampInt(op.AfterCol, 0, lineRuneLen(m.Lines, m.CursorRow))
+		m.selecting = false
+		m.clearExtraCursors()
 		m.markModified()
 	}
 

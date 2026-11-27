@@ -254,7 +254,13 @@ func (m Model) mainContentWidth() int {
 
 func (m Model) editorTextWidth() int {
 	textWidth := m.mainContentWidth()
-	if m.viewMode == ViewModeSplit {
+	if m.pluginPanel.Visible {
+		ew := textWidth * 60 / 100
+		if ew < 20 {
+			ew = textWidth / 2
+		}
+		textWidth = ew
+	} else if m.viewMode == ViewModeSplit {
 		textWidth = textWidth / 2
 	}
 

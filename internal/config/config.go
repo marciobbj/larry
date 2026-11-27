@@ -6,12 +6,61 @@ import (
 	"path/filepath"
 )
 
+type PluginsConfig struct {
+	Enabled  *bool                     `json:"enabled,omitempty"`
+	Disabled []string                  `json:"disabled,omitempty"`
+	Settings map[string]map[string]any `json:"settings,omitempty"`
+}
+
+func (p PluginsConfig) IsEnabled() bool {
+	if p.Enabled == nil {
+		return true
+	}
+	return *p.Enabled
+}
+
+func (p PluginsConfig) IsDisabled(name string) bool {
+	for _, d := range p.Disabled {
+		if d == name {
+			return true
+		}
+	}
+	return false
+}
+
 type Config struct {
-	Theme       string `json:"theme"`
-	TabWidth    int    `json:"tab_width"`
-	LineNumbers bool   `json:"line_numbers"`
-	WordWrap    bool   `json:"word_wrap"`
-	LeaderKey   string `json:"leader_key"`
+	Theme       string        `json:"theme"`
+	TabWidth    int           `json:"tab_width"`
+	LineNumbers bool          `json:"line_numbers"`
+	WordWrap    bool          `json:"word_wrap"`
+	LeaderKey   string        `json:"leader_key"`
+	Plugins     PluginsConfig `json:"plugins,omitempty"`
+}
+
+// PluginsDir returns the fixed, cross-platform directory where Larry discovers Lua plugins:
+//   - Linux:   $XDG_CONFIG_HOME/larry/plugins (default: ~/.config/larry/plugins)
+//   - macOS:   ~/Library/Application Support/larry/plugins (falls back to ~/.config/larry/plugins if present)
+//   - Windows: %AppData%\larry\plugins
+func PluginsDir() string {
+	var primary string
+	if configDir, err := os.UserConfigDir(); err == nil && configDir != "" {
+		primary = filepath.Join(configDir, "larry", "plugins")
+		if info, statErr := os.Stat(primary); statErr == nil && info.IsDir() {
+			return primary
+		}
+	}
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		fallback := filepath.Join(homeDir, ".config", "larry", "plugins")
+		if fallback != primary {
+			if info, statErr := os.Stat(fallback); statErr == nil && info.IsDir() {
+				return fallback
+			}
+		}
+		if primary == "" {
+			return fallback
+		}
+	}
+	return primary
 }
 
 func DefaultConfig() Config {

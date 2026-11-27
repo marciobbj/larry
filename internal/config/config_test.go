@@ -67,3 +67,18 @@ func TestLoadConfig_ExplicitPath(t *testing.T) {
 		t.Errorf("expected theme nord, got %s", cfg.Theme)
 	}
 }
+
+func TestPluginsDir_DefaultLocation(t *testing.T) {
+	tmpConfigDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpConfigDir)
+	t.Setenv("HOME", tmpConfigDir)
+	t.Setenv("APPDATA", tmpConfigDir)
+
+	dir := PluginsDir()
+	if dir == "" {
+		t.Fatal("expected non-empty PluginsDir()")
+	}
+	if filepath.Base(dir) != "plugins" || filepath.Base(filepath.Dir(dir)) != "larry" {
+		t.Fatalf("expected .../larry/plugins, got %q", dir)
+	}
+}
