@@ -46,6 +46,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 
 	if path == "" {
+		if hasOmarchyTheme() {
+			cfg.Theme = "omarchy"
+		}
 		return cfg, nil
 	}
 
@@ -59,5 +62,31 @@ func LoadConfig(path string) (Config, error) {
 		return DefaultConfig(), err
 	}
 
+	if cfg.Theme == "" && hasOmarchyTheme() {
+		cfg.Theme = "omarchy"
+	}
+
 	return cfg, nil
+}
+
+func hasOmarchyTheme() bool {
+	if envPath := os.Getenv("LARRY_OMARCHY_COLORS"); envPath != "" {
+		if _, err := os.Stat(envPath); err == nil {
+			return true
+		}
+	}
+	if stateHome := os.Getenv("XDG_STATE_HOME"); stateHome != "" {
+		if _, err := os.Stat(filepath.Join(stateHome, "omarchy", "current", "theme", "colors.toml")); err == nil {
+			return true
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		if _, err := os.Stat(filepath.Join(home, ".local", "state", "omarchy", "current", "theme", "colors.toml")); err == nil {
+			return true
+		}
+		if _, err := os.Stat(filepath.Join(home, ".config", "omarchy", "current", "theme", "colors.toml")); err == nil {
+			return true
+		}
+	}
+	return false
 }

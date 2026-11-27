@@ -6,9 +6,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var splitDividerStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("240"))
-
 func (m Model) viewSplit() string {
 	totalWidth := m.mainContentWidth()
 	totalHeight := m.editorViewportHeight()
@@ -31,7 +28,7 @@ func (m Model) viewSplit() string {
 	var dividerBuilder strings.Builder
 	dividerBuilder.Grow(totalHeight * 4)
 	for i := 0; i < totalHeight; i++ {
-		dividerBuilder.WriteString(splitDividerStyle.Render("│"))
+		dividerBuilder.WriteString(borderStyle.Render("│"))
 		if i < totalHeight-1 {
 			dividerBuilder.WriteByte('\n')
 		}

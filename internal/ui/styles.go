@@ -2,7 +2,33 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
+// UIPalette holds semantic colors shared across every Larry UI component.
+type UIPalette struct {
+	IsDark      bool
+	Accent      lipgloss.Color
+	AccentAlt   lipgloss.Color
+	AccentFg    lipgloss.Color
+	Background  lipgloss.Color
+	Surface     lipgloss.Color
+	Selection   lipgloss.Color
+	SelectionFg lipgloss.Color
+	Foreground  lipgloss.Color
+	SubtleFg    lipgloss.Color
+	MutedFg     lipgloss.Color
+	Border      lipgloss.Color
+	Red         lipgloss.Color
+	Green       lipgloss.Color
+	Yellow      lipgloss.Color
+	Blue        lipgloss.Color
+	Cyan        lipgloss.Color
+	Magenta     lipgloss.Color
+	CursorBg    lipgloss.Color
+	CursorFg    lipgloss.Color
+}
+
 var (
+	activePalette = defaultPalette(true)
+
 	styleCursor   lipgloss.Style
 	styleSelected lipgloss.Style
 	styleSearch   lipgloss.Style
@@ -40,152 +66,118 @@ var (
 	treeRuleStyle            lipgloss.Style
 )
 
-func initStyles() {
-	isDark := lipgloss.HasDarkBackground()
-
+func defaultPalette(isDark bool) UIPalette {
 	if isDark {
-		styleCursor = lipgloss.NewStyle().Background(lipgloss.Color("252")).Foreground(lipgloss.Color("0"))
-		styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255"))
-		styleSearch = lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0"))
-		styleFile = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("235"))
-		styleDir = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true).Background(lipgloss.Color("235"))
-		lineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		borderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		statusBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Background(lipgloss.Color("237"))
-		modalStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Padding(1, 2).
-			Background(lipgloss.Color("235"))
-		modalTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("170")).
-			Background(lipgloss.Color("235")).
-			Bold(true).
-			Align(lipgloss.Center)
-
-		helpStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Padding(1, 2).
-			Background(lipgloss.Color("236")).
-			Foreground(lipgloss.Color("252"))
-		helpTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("170")).
-			Background(lipgloss.Color("236")).
-			Bold(true)
-		categoryStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("81")).
-			Background(lipgloss.Color("236")).
-			Bold(true)
-		keyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("118")).
-			Background(lipgloss.Color("236")).
-			Bold(true)
-		descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("248")).
-			Background(lipgloss.Color("236"))
-		footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Background(lipgloss.Color("236"))
-
-		keyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("118")).
-			Background(lipgloss.Color("236")).
-			Bold(true)
-		descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("248")).
-			Background(lipgloss.Color("236"))
-		footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Background(lipgloss.Color("236")).
-			MarginTop(1)
-
-		textInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-
-		treeHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true)
-		treeHeaderFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("170")).Bold(true)
-		treeDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		treeDividerFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
-		treeGuideStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-		treeDirStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
-		treeFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-		treeSymlinkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
-		treeActiveFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("118")).Bold(true)
-		treeCursorFocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255")).Bold(true)
-		treeCursorUnfocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("237")).Foreground(lipgloss.Color("250"))
-		treeEmptyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
-		treeRuleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-	} else {
-		styleCursor = lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("255"))
-		styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("153")).Foreground(lipgloss.Color("0"))
-		styleSearch = lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0"))
-		styleFile = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("254"))
-		styleDir = lipgloss.NewStyle().Foreground(lipgloss.Color("27")).Bold(true).Background(lipgloss.Color("254"))
-		lineNumStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-		borderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-		statusBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("235")).Background(lipgloss.Color("252"))
-		modalStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Padding(1, 2).
-			Background(lipgloss.Color("254"))
-		modalTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("125")).
-			Background(lipgloss.Color("254")).
-			Bold(true).
-			Align(lipgloss.Center)
-
-		helpStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Padding(1, 2).
-			Background(lipgloss.Color("254")).
-			Foreground(lipgloss.Color("235"))
-		helpTitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("125")).
-			Background(lipgloss.Color("254")).
-			Bold(true)
-		categoryStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("25")).
-			Background(lipgloss.Color("254")).
-			Bold(true)
-		keyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("22")).
-			Background(lipgloss.Color("254")).
-			Bold(true)
-		descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Background(lipgloss.Color("254"))
-		footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244")).
-			Background(lipgloss.Color("254"))
-
-		keyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("22")).
-			Background(lipgloss.Color("254")).
-			Bold(true)
-		descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Background(lipgloss.Color("254"))
-		footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244")).
-			Background(lipgloss.Color("254")).
-			MarginTop(1)
-
-		textInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0"))
-
-		treeHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Bold(true)
-		treeHeaderFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("125")).Bold(true)
-		treeDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-		treeDividerFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
-		treeGuideStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-		treeDirStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("27")).Bold(true)
-		treeFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("235"))
-		treeSymlinkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("31"))
-		treeActiveFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("22")).Bold(true)
-		treeCursorFocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255")).Bold(true)
-		treeCursorUnfocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("252")).Foreground(lipgloss.Color("236"))
-		treeEmptyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
-		treeRuleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+		return UIPalette{
+			IsDark:      true,
+			Accent:      lipgloss.Color("62"),
+			AccentAlt:   lipgloss.Color("170"),
+			AccentFg:    lipgloss.Color("255"),
+			Background:  lipgloss.Color("235"),
+			Surface:     lipgloss.Color("236"),
+			Selection:   lipgloss.Color("62"),
+			SelectionFg: lipgloss.Color("255"),
+			Foreground:  lipgloss.Color("252"),
+			SubtleFg:    lipgloss.Color("248"),
+			MutedFg:     lipgloss.Color("241"),
+			Border:      lipgloss.Color("240"),
+			Red:         lipgloss.Color("203"),
+			Green:       lipgloss.Color("118"),
+			Yellow:      lipgloss.Color("226"),
+			Blue:        lipgloss.Color("39"),
+			Cyan:        lipgloss.Color("81"),
+			Magenta:     lipgloss.Color("170"),
+			CursorBg:    lipgloss.Color("252"),
+			CursorFg:    lipgloss.Color("0"),
+		}
 	}
+
+	return UIPalette{
+		IsDark:      false,
+		Accent:      lipgloss.Color("62"),
+		AccentAlt:   lipgloss.Color("125"),
+		AccentFg:    lipgloss.Color("255"),
+		Background:  lipgloss.Color("254"),
+		Surface:     lipgloss.Color("252"),
+		Selection:   lipgloss.Color("153"),
+		SelectionFg: lipgloss.Color("0"),
+		Foreground:  lipgloss.Color("235"),
+		SubtleFg:    lipgloss.Color("240"),
+		MutedFg:     lipgloss.Color("244"),
+		Border:      lipgloss.Color("244"),
+		Red:         lipgloss.Color("160"),
+		Green:       lipgloss.Color("22"),
+		Yellow:      lipgloss.Color("226"),
+		Blue:        lipgloss.Color("27"),
+		Cyan:        lipgloss.Color("25"),
+		Magenta:     lipgloss.Color("125"),
+		CursorBg:    lipgloss.Color("235"),
+		CursorFg:    lipgloss.Color("255"),
+	}
+}
+
+func initStyles() {
+	p := activePalette
+
+	styleCursor = lipgloss.NewStyle().Background(p.CursorBg).Foreground(p.CursorFg)
+	styleSelected = lipgloss.NewStyle().Background(p.Selection).Foreground(p.SelectionFg)
+	styleSearch = lipgloss.NewStyle().Background(p.Yellow).Foreground(lipgloss.Color("0"))
+	styleFile = lipgloss.NewStyle().Foreground(p.Foreground).Background(p.Background)
+	styleDir = lipgloss.NewStyle().Foreground(p.Blue).Bold(true).Background(p.Background)
+	lineNumStyle = lipgloss.NewStyle().Foreground(p.MutedFg)
+	borderStyle = lipgloss.NewStyle().Foreground(p.Border)
+	statusBarStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(p.Surface)
+
+	modalStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(p.Accent).
+		Padding(1, 2).
+		Background(p.Background)
+	modalTitleStyle = lipgloss.NewStyle().
+		Foreground(p.AccentAlt).
+		Background(p.Background).
+		Bold(true).
+		Align(lipgloss.Center)
+
+	helpStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(p.Accent).
+		Padding(1, 2).
+		Background(p.Surface).
+		Foreground(p.Foreground)
+	helpTitleStyle = lipgloss.NewStyle().
+		Foreground(p.AccentAlt).
+		Background(p.Surface).
+		Bold(true)
+	categoryStyle = lipgloss.NewStyle().
+		Foreground(p.Cyan).
+		Background(p.Surface).
+		Bold(true)
+	keyStyle = lipgloss.NewStyle().
+		Foreground(p.Green).
+		Background(p.Surface).
+		Bold(true)
+	descStyle = lipgloss.NewStyle().
+		Foreground(p.SubtleFg).
+		Background(p.Surface)
+	footerStyle = lipgloss.NewStyle().
+		Foreground(p.MutedFg).
+		Background(p.Surface).
+		MarginTop(1)
+
+	textInputStyle = lipgloss.NewStyle().Foreground(p.Foreground)
+
+	treeHeaderStyle = lipgloss.NewStyle().Foreground(p.SubtleFg).Bold(true)
+	treeHeaderFocusedStyle = lipgloss.NewStyle().Foreground(p.Accent).Bold(true)
+	treeDividerStyle = lipgloss.NewStyle().Foreground(p.Border)
+	treeDividerFocusedStyle = lipgloss.NewStyle().Foreground(p.Accent)
+	treeGuideStyle = lipgloss.NewStyle().Foreground(p.Border)
+	treeDirStyle = lipgloss.NewStyle().Foreground(p.Blue).Bold(true)
+	treeFileStyle = lipgloss.NewStyle().Foreground(p.Foreground)
+	treeSymlinkStyle = lipgloss.NewStyle().Foreground(p.Cyan)
+	treeActiveFileStyle = lipgloss.NewStyle().Foreground(p.Green).Bold(true)
+	treeCursorFocusedStyle = lipgloss.NewStyle().Background(p.Accent).Foreground(p.AccentFg).Bold(true)
+	treeCursorUnfocusedStyle = lipgloss.NewStyle().Background(p.Surface).Foreground(p.SubtleFg)
+	treeEmptyStyle = lipgloss.NewStyle().Foreground(p.MutedFg).Italic(true)
+	treeRuleStyle = lipgloss.NewStyle().Foreground(p.Border)
 }

@@ -184,7 +184,7 @@ larry -config path/to/your/config.json
 ```
 | Field | Description | Default |
 |-------|-------------|---------|
-| `theme` | Syntax highlighting theme (e.g., `dracula`, `monokai`, `nord`, `github`) | `dracula` |
+| `theme` | Syntax & UI theme (e.g., `omarchy`, `dracula`, `monokai`, `nord`, `github`). Use `omarchy` to follow your active Omarchy color scheme live. | `omarchy` (on Omarchy) / `dracula` |
 | `tab_width` | Number of spaces for a tab character | `4` |
 | `line_numbers` | Show or hide line numbers | `true` |
 | `leader_key` | Base key for shortcuts (e.g., `ctrl`, `alt`). | `ctrl` |

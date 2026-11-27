@@ -362,49 +362,27 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 		innerWidth = 30
 	}
 
+	p := activePalette
 	bg := modalStyle.GetBackground()
-	isDark := lipgloss.HasDarkBackground()
 
-	var (
-		badgeActiveBg   lipgloss.Color
-		badgeInactiveBg lipgloss.Color
-		badgeFg         lipgloss.Color
-		mutedFg         lipgloss.Color
-		highlightBg     lipgloss.Color
-		oldMatchFg      lipgloss.Color
-		newMatchFg      lipgloss.Color
-		confirmFg       lipgloss.Color
-		fileFg          lipgloss.Color
-	)
+	badgeActiveBg := p.Accent
+	badgeInactiveBg := p.Surface
+	badgeFg := p.AccentFg
+	badgeInactiveFg := p.SubtleFg
+	mutedFg := p.MutedFg
+	highlightBg := p.Selection
+	highlightFg := p.SelectionFg
+	oldMatchFg := p.Red
+	newMatchFg := p.Green
+	confirmFg := p.Yellow
+	fileFg := p.Cyan
 
-	if isDark {
-		badgeActiveBg = lipgloss.Color("62")
-		badgeInactiveBg = lipgloss.Color("238")
-		badgeFg = lipgloss.Color("255")
-		mutedFg = lipgloss.Color("244")
-		highlightBg = lipgloss.Color("237")
-		oldMatchFg = lipgloss.Color("203")
-		newMatchFg = lipgloss.Color("118")
-		confirmFg = lipgloss.Color("220")
-		fileFg = lipgloss.Color("81")
-	} else {
-		badgeActiveBg = lipgloss.Color("62")
-		badgeInactiveBg = lipgloss.Color("250")
-		badgeFg = lipgloss.Color("255")
-		mutedFg = lipgloss.Color("242")
-		highlightBg = lipgloss.Color("252")
-		oldMatchFg = lipgloss.Color("160")
-		newMatchFg = lipgloss.Color("28")
-		confirmFg = lipgloss.Color("130")
-		fileFg = lipgloss.Color("25")
-	}
-
-	findBadgeStyle := lipgloss.NewStyle().Background(badgeInactiveBg).Foreground(badgeFg).Bold(true).Width(9).Align(lipgloss.Center)
-	repBadgeStyle := lipgloss.NewStyle().Background(badgeInactiveBg).Foreground(badgeFg).Bold(true).Width(9).Align(lipgloss.Center)
+	findBadgeStyle := lipgloss.NewStyle().Background(badgeInactiveBg).Foreground(badgeInactiveFg).Bold(true).Width(9).Align(lipgloss.Center)
+	repBadgeStyle := lipgloss.NewStyle().Background(badgeInactiveBg).Foreground(badgeInactiveFg).Bold(true).Width(9).Align(lipgloss.Center)
 	if m.focus == grFocusFind {
-		findBadgeStyle = findBadgeStyle.Background(badgeActiveBg)
+		findBadgeStyle = findBadgeStyle.Background(badgeActiveBg).Foreground(badgeFg)
 	} else if m.focus == grFocusReplace {
-		repBadgeStyle = repBadgeStyle.Background(badgeActiveBg)
+		repBadgeStyle = repBadgeStyle.Background(badgeActiveBg).Foreground(badgeFg)
 	}
 
 	mutedStyle := lipgloss.NewStyle().Foreground(mutedFg).Background(bg)
@@ -481,10 +459,7 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 			headerText := fmt.Sprintf("%s%s %s (%d)", pointer, check, g.DisplayPath, g.TotalCount)
 			headerText = truncateDisplay(headerText, innerWidth)
 			if isCurr {
-				rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(highlightBg).Bold(true)
-				if !isDark {
-					rowStyle = rowStyle.Foreground(lipgloss.Color("0"))
-				}
+				rowStyle := lipgloss.NewStyle().Foreground(highlightFg).Background(highlightBg).Bold(true)
 				lines = append(lines, rowStyle.Width(innerWidth).Render(headerText))
 			} else {
 				lines = append(lines, fileStyle.Render(headerText))

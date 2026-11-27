@@ -15,36 +15,16 @@ func (m Model) renderStatusBar() string {
 		width = 20
 	}
 
-	isDark := lipgloss.HasDarkBackground()
+	p := activePalette
 
 	// ── Colors ──
-	var (
-		barBg        lipgloss.Color
-		fileBg       lipgloss.Color
-		fileFg       lipgloss.Color
-		shortcutKey  lipgloss.Color
-		shortcutSep  lipgloss.Color
-		shortcutDesc lipgloss.Color
-		modifiedFg   lipgloss.Color
-	)
-
-	if isDark {
-		barBg = lipgloss.Color("236")
-		fileBg = lipgloss.Color("62")
-		fileFg = lipgloss.Color("255")
-		shortcutKey = lipgloss.Color("170")
-		shortcutSep = lipgloss.Color("240")
-		shortcutDesc = lipgloss.Color("252")
-		modifiedFg = lipgloss.Color("215")
-	} else {
-		barBg = lipgloss.Color("254")
-		fileBg = lipgloss.Color("62")
-		fileFg = lipgloss.Color("255")
-		shortcutKey = lipgloss.Color("125")
-		shortcutSep = lipgloss.Color("249")
-		shortcutDesc = lipgloss.Color("236")
-		modifiedFg = lipgloss.Color("166")
-	}
+	barBg := p.Surface
+	fileBg := p.Accent
+	fileFg := p.AccentFg
+	shortcutKey := p.AccentAlt
+	shortcutSep := p.Border
+	shortcutDesc := p.Foreground
+	modifiedFg := p.Yellow
 
 	// ── Styles ──
 	fileTabStyle := lipgloss.NewStyle().

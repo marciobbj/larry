@@ -144,11 +144,12 @@ func (m *FinderModel) performSearch() tea.Cmd {
 }
 
 func (m FinderModel) View() string {
+	p := activePalette
 	var modeStr string
 	if m.mode == FinderModeFile {
-		modeStr = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255")).Padding(0, 1).Render(" FILES ")
+		modeStr = lipgloss.NewStyle().Background(p.Accent).Foreground(p.AccentFg).Bold(true).Padding(0, 1).Render(" FILES ")
 	} else {
-		modeStr = lipgloss.NewStyle().Background(lipgloss.Color("160")).Foreground(lipgloss.Color("255")).Padding(0, 1).Render(" GREP ")
+		modeStr = lipgloss.NewStyle().Background(p.Red).Foreground(p.AccentFg).Bold(true).Padding(0, 1).Render(" GREP ")
 	}
 
 	header := lipgloss.JoinHorizontal(lipgloss.Center, modeStr, " ", m.textInput.View())
@@ -170,7 +171,7 @@ func (m FinderModel) View() string {
 		res := m.results[i]
 		cursor := "  "
 		if i == m.cursor {
-			cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("62")).Render("» ")
+			cursor = lipgloss.NewStyle().Foreground(p.Accent).Render("» ")
 		}
 
 		var line string
@@ -189,7 +190,7 @@ func (m FinderModel) View() string {
 		}
 
 		if i == m.cursor {
-			resultsView.WriteString(cursor + lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("237")).Render(line) + "\n")
+			resultsView.WriteString(cursor + lipgloss.NewStyle().Foreground(p.SelectionFg).Background(p.Selection).Render(line) + "\n")
 		} else {
 			resultsView.WriteString(cursor + line + "\n")
 		}

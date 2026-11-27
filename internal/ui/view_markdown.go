@@ -24,9 +24,7 @@ func (m *Model) initMarkdownRenderer(width int) error {
 	}
 
 	styleCfg := styles.DarkStyleConfig
-	if m.Config.Theme == "github" || m.Config.Theme == "monokai-light" {
-		styleCfg = styles.LightStyleConfig
-	} else if !lipgloss.HasDarkBackground() && m.Config.Theme == "" {
+	if !activePalette.IsDark || m.Config.Theme == "github" || m.Config.Theme == "monokai-light" {
 		styleCfg = styles.LightStyleConfig
 	}
 

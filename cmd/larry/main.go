@@ -16,6 +16,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "", "Path to configuration file")
+	themeOverride := flag.String("theme", "", "Override color theme (e.g. omarchy, dracula, nord)")
 	help := flag.Bool("help", false, "Show help information")
 	flag.Parse()
 
@@ -66,6 +67,9 @@ func main() {
 		}
 		// If no path provided or fallback, LoadConfig returns valid cfg (default) usually,
 	}
+	if *themeOverride != "" {
+		cfg.Theme = *themeOverride
+	}
 
 	// Initialize the model
 	m := ui.InitialModel(filename, lines, cfg)
@@ -96,6 +100,7 @@ ARGUMENTS:
 
 OPTIONS:
   -config string    Path to configuration file (default: uses built-in defaults)
+  -theme string     Override color theme (e.g., "omarchy", "dracula", "monokai", "nord")
   -help             Show this help information
 
 EXAMPLES:

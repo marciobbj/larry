@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/alecthomas/chroma/v2"
@@ -10,9 +11,12 @@ import (
 )
 
 var (
-	lexerCache    sync.Map // map[string]chroma.Lexer (filename -> lexer)
-	theme         *chroma.Style
-	lipglossCache sync.Map // map[chroma.TokenType]lipgloss.Style
+	lexerCache       sync.Map // map[string]chroma.Lexer (filename -> lexer)
+	theme            *chroma.Style
+	lipglossCache    sync.Map // map[chroma.TokenType]lipgloss.Style
+	omarchyActive    bool
+	omarchyColorPath string
+	omarchySignature string
 )
 
 func init() {
@@ -23,7 +27,45 @@ func init() {
 	}
 }
 
+func isOmarchyThemeName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	return n == "omarchy" || n == "auto"
+}
+
+func clearSyntaxCache() {
+	lipglossCache.Range(func(key, value interface{}) bool {
+		lipglossCache.Delete(key)
+		return true
+	})
+}
+
 func SetTheme(themeName string) {
+	if isOmarchyThemeName(themeName) {
+		if colors, path, err := LoadCurrentOmarchyColors(); err == nil {
+			if customStyle, styleErr := BuildOmarchyChromaStyle(colors); styleErr == nil {
+				theme = customStyle
+				activePalette = paletteFromOmarchy(colors)
+				omarchyActive = true
+				omarchyColorPath = path
+				omarchySignature = OmarchyThemeSignature(path)
+				clearSyntaxCache()
+				initStyles()
+				return
+			}
+		}
+		// Fallback when Omarchy is not installed
+		if lipgloss.HasDarkBackground() {
+			themeName = "dracula"
+		} else {
+			themeName = "github"
+		}
+	}
+
+	omarchyActive = false
+	omarchyColorPath = ""
+	omarchySignature = ""
+	activePalette = defaultPalette(lipgloss.HasDarkBackground())
+
 	if themeName == "dracula" && !lipgloss.HasDarkBackground() {
 		themeName = "github"
 	}
@@ -33,11 +75,8 @@ func SetTheme(themeName string) {
 		t = styles.Fallback
 	}
 	theme = t
-	// Clear the cache as the theme has changed
-	lipglossCache.Range(func(key, value interface{}) bool {
-		lipglossCache.Delete(key)
-		return true
-	})
+	clearSyntaxCache()
+	initStyles()
 }
 
 func GetLineStyles(line string, filename string) []lipgloss.Style {

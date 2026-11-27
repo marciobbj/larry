@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"larry/internal/config"
 	"larry/internal/search"
@@ -80,7 +81,6 @@ func isMarkdownFile(filename string) bool {
 
 func InitialModel(filename string, lines []string, cfg config.Config) Model {
 	SetTheme(cfg.Theme)
-	initStyles()
 
 	ti := textinput.New()
 	ti.Placeholder = "..."
@@ -474,11 +474,38 @@ func (m Model) reloadActiveFileIfModified(modifiedPaths []string) Model {
 	return m.updateViewport()
 }
 
+type omarchyThemeTickMsg struct{}
+
+func omarchyWatchTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return omarchyThemeTickMsg{}
+	})
+}
+
 func (m Model) Init() tea.Cmd {
+	if isOmarchyThemeName(m.Config.Theme) {
+		return omarchyWatchTickCmd()
+	}
 	return nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(omarchyThemeTickMsg); ok {
+		if isOmarchyThemeName(m.Config.Theme) {
+			path := ResolveOmarchyColorsPath()
+			sig := OmarchyThemeSignature(path)
+			if sig != "" && sig != omarchySignature {
+				SetTheme(m.Config.Theme)
+				m.textInput.PromptStyle = textInputStyle
+				m.textInput.TextStyle = textInputStyle
+				m.markdownRenderer = nil
+				m.markdownCacheValid = false
+				m = m.syncMarkdownForLayout()
+			}
+			return m, omarchyWatchTickCmd()
+		}
+		return m, nil
+	}
 
 	if m.globalReplacing {
 		if ws, ok := msg.(tea.WindowSizeMsg); ok {

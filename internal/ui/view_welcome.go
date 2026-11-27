@@ -19,44 +19,22 @@ func (m Model) viewWelcome() string {
 		height = 23
 	}
 
-	isDark := lipgloss.HasDarkBackground()
+	p := activePalette
 
 	// ── Color palette ──
-	var (
-		accentColor    lipgloss.Color
-		catColor       lipgloss.Color
-		dimColor       lipgloss.Color
-		subtleColor    lipgloss.Color
-		keyColor       lipgloss.Color
-		descFgColor    lipgloss.Color
-		separatorColor lipgloss.Color
-		taglineColor   lipgloss.Color
-		versionBg      lipgloss.Color
-		versionFg      lipgloss.Color
-	)
-
-	if isDark {
-		accentColor = lipgloss.Color("170")    // purple/magenta
-		catColor = lipgloss.Color("252")       // bright white for the cat
-		dimColor = lipgloss.Color("242")       // dim gray
-		subtleColor = lipgloss.Color("246")    // subtle gray
-		keyColor = lipgloss.Color("118")       // green for keys
-		descFgColor = lipgloss.Color("252")    // light gray
-		separatorColor = lipgloss.Color("238") // dark separator
-		taglineColor = lipgloss.Color("249")   // soft white
-		versionBg = lipgloss.Color("237")      // subtle pill bg
-		versionFg = lipgloss.Color("170")      // accent version text
-	} else {
-		accentColor = lipgloss.Color("125")    // magenta
-		catColor = lipgloss.Color("238")       // dark for the cat
-		dimColor = lipgloss.Color("244")       // gray
-		subtleColor = lipgloss.Color("240")    // darker gray
-		keyColor = lipgloss.Color("22")        // green for keys
-		descFgColor = lipgloss.Color("236")    // dark gray
-		separatorColor = lipgloss.Color("251") // light separator
-		taglineColor = lipgloss.Color("240")   // gray
-		versionBg = lipgloss.Color("252")      // subtle pill bg
-		versionFg = lipgloss.Color("125")      // accent version text
+	accentColor := p.AccentAlt
+	catColor := p.Foreground
+	dimColor := p.MutedFg
+	subtleColor := p.SubtleFg
+	keyColor := p.Green
+	descFgColor := p.Foreground
+	separatorColor := p.Border
+	taglineColor := p.SubtleFg
+	versionBg := p.Surface
+	versionFg := p.AccentAlt
+	if omarchyActive {
+		accentColor = p.Accent
+		versionFg = p.Accent
 	}
 
 	// ── Styles ──
