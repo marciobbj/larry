@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"strings"
+
+	"github.com/charmbracelet/bubbles/key"
+)
 
 type KeyMap struct {
 	Quit               key.Binding
@@ -56,7 +60,21 @@ type KeyMap struct {
 	CommandPalette        key.Binding
 }
 
+func normalizeLeaderKey(leader string) string {
+	leader = strings.ToLower(strings.TrimSpace(leader))
+	if leader == "" {
+		return "ctrl"
+	}
+	return leader
+}
+
+func displayLeaderKey(leader string) string {
+	l := normalizeLeaderKey(leader)
+	return strings.ToUpper(l[:1]) + l[1:]
+}
+
 func NewKeyMap(leader string) KeyMap {
+	leader = normalizeLeaderKey(leader)
 	prevTabKeys := []string{"alt+["}
 	nextTabKeys := []string{"alt+]"}
 	addCursorUpKeys := []string{"alt+up"}

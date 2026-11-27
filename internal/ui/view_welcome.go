@@ -74,10 +74,7 @@ func (m Model) viewWelcome() string {
 		Italic(true)
 
 	// ── Leader key ──
-	leader := strings.Title(m.Config.LeaderKey)
-	if leader == "" {
-		leader = "Ctrl"
-	}
+	leader := displayLeaderKey(m.Config.LeaderKey)
 
 	// ── Uniform block width ──
 	blockWidth := 50

@@ -381,10 +381,7 @@ func (m Model) saveCurrentFile(filename string) (Model, error) {
 // ── Command Palette ──
 
 func (m Model) openCommandPalette() Model {
-	leader := strings.Title(m.Config.LeaderKey)
-	if leader == "" {
-		leader = "Ctrl"
-	}
+	leader := displayLeaderKey(m.Config.LeaderKey)
 
 	entries := []PickerEntry{
 		{ID: "builtin.save", Category: "Editor", Label: "Save File", Shortcut: leader + "+s"},

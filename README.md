@@ -217,13 +217,17 @@ Larry loads its configuration automatically from:
 ### Platform & Terminal Notes
 
 - **Omarchy Linux**: Larry automatically reads `~/.local/state/omarchy/current/theme/colors.toml` (and legacy `~/.config/omarchy/current/theme/colors.toml`) and hot-reloads colors live when you switch themes.
-- **Ghostty Users**: Ghostty binds `Ctrl+Shift+Arrow` by default (`jump_to_prompt` / tab switching). You can either use `Alt+Shift+Arrow` directly in Larry or unbind them in `~/.config/ghostty/config`:
+- **Ghostty Users**: Ghostty binds `Ctrl+Shift+Arrow` by default (`jump_to_prompt` / tab switching), and on macOS binds `Option+Left/Right` to `esc:b`/`esc:f` (instead of `alt+left`/`alt+right`). To send raw arrow chords to Larry, unbind them in `~/.config/ghostty/config`:
   ```ini
   keybind = ctrl+shift+arrow_up=unbind
   keybind = ctrl+shift+arrow_down=unbind
   keybind = ctrl+shift+arrow_left=unbind
   keybind = ctrl+shift+arrow_right=unbind
+  # macOS: send real alt+left / alt+right instead of esc:b / esc:f
+  keybind = alt+arrow_left=unbind
+  keybind = alt+arrow_right=unbind
   ```
+  *(If you unbind `alt+arrow_left/right` on macOS and want `Option+Left/Right` to keep jumping words in zsh, add `bindkey '^[[1;3D' backward-word` and `bindkey '^[[1;3C' forward-word` to `~/.zshrc`.)*
 - **macOS Users**: Since terminals rarely forward `Cmd`, set `"leader_key": "alt"` and map Option to Alt in your terminal preferences (Ghostty, Kitty, iTerm2, Alacritty).
 
 ## Lua Plugins
