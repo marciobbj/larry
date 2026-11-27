@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -11,6 +10,22 @@ import (
 
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// Built-in Quit & Command Palette always remain accessible.
+	if key.Matches(msg, m.KeyMap.Quit) {
+		m.Quitting = true
+		m.ClosePlugins()
+		return m, tea.Quit
+	}
+	if key.Matches(msg, m.KeyMap.CommandPalette) {
+		m = m.openCommandPalette()
+		return m, nil
+	}
+
+	// Plugin-registered keymaps (e.g. alt+f, alt+k, alt+d, f2, leader+y).
+	if m.plugins != nil && m.plugins.HandleKey(m.editorAPI(), msg.String()) {
+		return m, nil
+	}
 
 	switch {
 	case key.Matches(msg, m.KeyMap.ToggleMarkdownPreview):
@@ -56,6 +71,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.statusMsg = "Single cursor"
 		} else if m.selecting {
 			m.selecting = false
+		} else if m.pluginPanel.Visible {
+			m.pluginPanel.Visible = false
+			m.invalidateVisualCache()
 		}
 		return m, nil
 
@@ -92,23 +110,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.helpScroll = 0
 		return m, nil
 
-	case key.Matches(msg, m.KeyMap.Quit):
-		m.Quitting = true
-		return m, tea.Quit
-
 	case key.Matches(msg, m.KeyMap.Save):
 		if m.FileName != "" {
-			content := strings.Join(m.Lines, "\n")
-			err := os.WriteFile(m.FileName, []byte(content), 0644)
-			if err != nil {
-				m.statusMsg = "Error saving: " + err.Error()
-			} else {
-				m.statusMsg = "Saved: " + m.FileName
-				m.Modified = false
-				m.saveActiveTabState()
-				m.invalidateGitCache()
-				m.fileTree.RefreshGitStatus()
-			}
+			m, _ = m.saveCurrentFile(m.FileName)
 			return m, nil
 		}
 

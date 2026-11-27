@@ -49,6 +49,7 @@ func (m Model) viewHelpMenu(base string) string {
 				{"Alt+← / →", "Prev / next tab"},
 				{leader + "+l", "Toggle word wrap"},
 				{leader + "+u", "Markdown preview"},
+				{"Alt+p / F1", "Command palette"},
 				{leader + "+h", "Toggle help"},
 			},
 		},
@@ -113,6 +114,24 @@ func (m Model) viewHelpMenu(base string) string {
 				{leader + "+Home/End", "File start / end"},
 			},
 		},
+	}
+
+	if m.plugins != nil {
+		if kms := m.plugins.Keymaps(); len(kms) > 0 {
+			items := make([]helpItem, 0, len(kms))
+			for _, km := range kms {
+				desc := km.Desc
+				if desc == "" {
+					desc = km.Plugin
+				}
+				items = append(items, helpItem{Key: km.Key, Desc: desc})
+			}
+			leftSections = append(leftSections, helpSection{
+				Title: "Plugins",
+				Color: p.Magenta,
+				Items: items,
+			})
+		}
 	}
 
 	// Responsive card dimensions

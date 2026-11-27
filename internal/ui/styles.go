@@ -71,6 +71,13 @@ var (
 	gitDeletedStyle   lipgloss.Style
 	gitUntrackedStyle lipgloss.Style
 	gitDirDirtyStyle  lipgloss.Style
+
+	diagErrorStyle          lipgloss.Style
+	diagWarnStyle           lipgloss.Style
+	diagInfoStyle           lipgloss.Style
+	diagHintStyle           lipgloss.Style
+	diagErrorUnderlineStyle lipgloss.Style
+	diagWarnUnderlineStyle  lipgloss.Style
 )
 
 func defaultPalette(isDark bool) UIPalette {
@@ -194,4 +201,44 @@ func initStyles() {
 	gitDeletedStyle = lipgloss.NewStyle().Foreground(p.Red).Bold(true)
 	gitUntrackedStyle = lipgloss.NewStyle().Foreground(p.Cyan).Bold(true)
 	gitDirDirtyStyle = lipgloss.NewStyle().Foreground(p.Yellow)
+
+	diagErrorStyle = lipgloss.NewStyle().Foreground(p.Red).Bold(true)
+	diagWarnStyle = lipgloss.NewStyle().Foreground(p.Yellow).Bold(true)
+	diagInfoStyle = lipgloss.NewStyle().Foreground(p.Cyan).Bold(true)
+	diagHintStyle = lipgloss.NewStyle().Foreground(p.MutedFg)
+	diagErrorUnderlineStyle = lipgloss.NewStyle().Foreground(p.Red).Underline(true)
+	diagWarnUnderlineStyle = lipgloss.NewStyle().Foreground(p.Yellow).Underline(true)
+}
+
+// paletteColorByName resolves semantic color names from plugins into Larry's active UIPalette.
+func paletteColorByName(name string) lipgloss.Color {
+	p := activePalette
+	switch name {
+	case "red", "error":
+		return p.Red
+	case "yellow", "warn", "warning":
+		return p.Yellow
+	case "green", "ok", "success":
+		return p.Green
+	case "blue":
+		return p.Blue
+	case "cyan", "info":
+		return p.Cyan
+	case "magenta", "purple":
+		return p.Magenta
+	case "accent":
+		return p.Accent
+	case "accent_alt":
+		return p.AccentAlt
+	case "muted", "hint":
+		return p.MutedFg
+	case "subtle":
+		return p.SubtleFg
+	case "fg", "foreground":
+		return p.Foreground
+	case "":
+		return p.Cyan
+	default:
+		return lipgloss.Color(name)
+	}
 }

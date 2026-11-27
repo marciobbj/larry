@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"larry/internal/git"
+	"larry/internal/plugin"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -21,6 +22,8 @@ type editorRenderState struct {
 	cursorsByRow map[int][]CursorSelection
 	occByRow    map[int][]colSpan
 	gitChanges  map[int]git.LineChange
+	gutterSigns map[int]plugin.GutterSign
+	diagsByRow  map[int][]plugin.Diagnostic
 }
 
 func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderState {
@@ -31,11 +34,20 @@ func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderSta
 			byRow[c.Row] = append(byRow[c.Row], c)
 		}
 	}
+	var gutterSigns map[int]plugin.GutterSign
+	var diagsByRow map[int][]plugin.Diagnostic
+	if m.plugins != nil && m.FileName != "" {
+		absPath := normalizeAbsPath(m.FileName)
+		gutterSigns = m.plugins.EffectiveGutterSigns(absPath)
+		diagsByRow = m.plugins.DiagnosticsByLine(absPath)
+	}
 	return editorRenderState{
 		cursors:      cursors,
 		cursorsByRow: byRow,
 		occByRow:     m.getVisibleOccurrences(viewStartRow, viewEndRow),
 		gitChanges:   m.gitLineChanges(),
+		gutterSigns:  gutterSigns,
+		diagsByRow:   diagsByRow,
 	}
 }
 
@@ -190,7 +202,11 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 				s.WriteString(borderStyle.Render("│"))
 			}
 			if m.Config.LineNumbers {
-				s.WriteString(formatGutter(lineNum, numDigits, isFirst, rs.gitChanges[lineNum]))
+				var pSign *plugin.GutterSign
+				if s, ok := rs.gutterSigns[lineNum]; ok {
+					pSign = &s
+				}
+				s.WriteString(formatGutterWithSign(lineNum, numDigits, isFirst, rs.gitChanges[lineNum], pSign))
 			}
 
 			syntaxStyles := m.getStylesForLine(lineNum)
@@ -297,7 +313,11 @@ func (m Model) viewEditorNoWrap(
 			s.WriteString(borderStyle.Render("│"))
 		}
 		if m.Config.LineNumbers {
-			s.WriteString(formatGutter(lineNum, numDigits, true, rs.gitChanges[lineNum]))
+			var pSign *plugin.GutterSign
+			if s, ok := rs.gutterSigns[lineNum]; ok {
+				pSign = &s
+			}
+			s.WriteString(formatGutterWithSign(lineNum, numDigits, true, rs.gitChanges[lineNum], pSign))
 		}
 
 		lineRunes := []rune(lines[lineNum])
@@ -390,21 +410,35 @@ func (m Model) viewEditorNoWrap(
 }
 
 func formatGutter(lineNum, numDigits int, isFirst bool, change git.LineChange) string {
+	return formatGutterWithSign(lineNum, numDigits, isFirst, change, nil)
+}
+
+func formatGutterWithSign(lineNum, numDigits int, isFirst bool, change git.LineChange, pluginSign *plugin.GutterSign) string {
 	numStr := fmt.Sprintf("%*d ", numDigits, lineNum+1)
 	var signStyled string
-	switch change {
-	case git.LineAdded:
-		signStyled = gitAddedStyle.Render("▎")
-	case git.LineModified:
-		signStyled = gitModifiedStyle.Render("▎")
-	case git.LineDeletedBelow:
-		if isFirst {
-			signStyled = gitDeletedStyle.Render("▁")
-		} else {
+	if isFirst && pluginSign != nil && pluginSign.Text != "" {
+		// Plugin/diagnostic gutter sign takes precedence on the primary line row.
+		runes := []rune(pluginSign.Text)
+		glyph := string(runes[0])
+		signStyled = lipgloss.NewStyle().
+			Foreground(paletteColorByName(pluginSign.Color)).
+			Bold(true).
+			Render(glyph)
+	} else {
+		switch change {
+		case git.LineAdded:
+			signStyled = gitAddedStyle.Render("▎")
+		case git.LineModified:
+			signStyled = gitModifiedStyle.Render("▎")
+		case git.LineDeletedBelow:
+			if isFirst {
+				signStyled = gitDeletedStyle.Render("▁")
+			} else {
+				signStyled = lineNumStyle.Render(" ")
+			}
+		default:
 			signStyled = lineNumStyle.Render(" ")
 		}
-	default:
-		signStyled = lineNumStyle.Render(" ")
 	}
 	if isFirst {
 		return signStyled + lineNumStyle.Render(numStr)
@@ -423,6 +457,34 @@ func (m Model) resolveCharStyle(
 	if i < len(syntaxStyles) {
 		style = syntaxStyles[i]
 		applyStyle = true
+	}
+
+	if len(rs.diagsByRow) > 0 {
+		if lineDiags := rs.diagsByRow[lineNum]; len(lineDiags) > 0 {
+			for _, d := range lineDiags {
+				if d.EndCol > d.Col {
+					if i >= d.Col && i < d.EndCol {
+						if d.Severity == plugin.SeverityError {
+							style = diagErrorUnderlineStyle
+							applyStyle = true
+							break
+						} else if d.Severity == plugin.SeverityWarning {
+							style = diagWarnUnderlineStyle
+							applyStyle = true
+						}
+					}
+				} else if i >= d.Col {
+					if d.Severity == plugin.SeverityError {
+						style = diagErrorUnderlineStyle
+						applyStyle = true
+						break
+					} else if d.Severity == plugin.SeverityWarning {
+						style = diagWarnUnderlineStyle
+						applyStyle = true
+					}
+				}
+			}
+		}
 	}
 
 	if len(rs.occByRow) > 0 && rs.isOccurrence(lineNum, i) {

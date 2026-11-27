@@ -90,6 +90,8 @@ larry [OPTIONS] [FILE... | DIRECTORY]
 |------|-------------|
 | `-config <path>` | Load a custom JSON configuration file |
 | `-theme <name>` | Override the configured color theme (e.g. `omarchy`, `dracula`, `nord`, `monokai`, `github`) |
+| `-plugins-dir <path>` | Override the Lua plugins directory (default `~/.config/larry/plugins`) |
+| `-no-plugins` | Start Larry without loading Lua plugins (safe mode) |
 | `-help` | Show CLI usage and configuration help |
 
 ### Examples
@@ -239,8 +241,8 @@ Larry loads its configuration automatically from:
 - [x] Instant split Markdown preview
 - [x] Config file & theme support (including Omarchy live color scheme)
 - [x] Built-in Help Menu & responsive resizing
+- [x] Embedded Lua plugin system (LSP JSON-RPC transport, linters, formatters, diagnostics, Command Palette)
 - [ ] Publish to package managers (AUR / Homebrew)
-- [ ] Extensibility & plugin / custom theme authoring
 
 ## License
 

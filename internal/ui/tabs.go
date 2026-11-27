@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"larry/internal/git"
+	"larry/internal/plugin"
 )
 
 // EditorTab stores the independent buffer, cursor, viewport, selection, and
@@ -180,7 +181,11 @@ func (m Model) switchToTab(idx int) Model {
 	}
 	m.saveActiveTabState()
 	m.showWelcome = false
-	return m.loadTabState(idx)
+	m = m.loadTabState(idx)
+	if m.plugins != nil {
+		m.plugins.Emit(m.editorAPI(), plugin.EventTabSwitch, nil)
+	}
+	return m
 }
 
 func (m Model) nextTab() Model {
