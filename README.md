@@ -9,7 +9,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-a6e3a1?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v1.0.0-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
+[![Version](https://img.shields.io/badge/Version-v1.1.1-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
 
 </div>
 
@@ -56,7 +56,7 @@ Larry sits in the sweet spot between **Nano** and **Neovim**: familiar shortcuts
 Download the latest release archive for Linux, macOS, or Windows from [GitHub Releases](https://github.com/marciobbj/larry/releases/latest), extract it, and place `larry` on your `PATH`:
 
 ```bash
-tar -xzf larry_v1.0.0_linux_amd64.tar.gz
+tar -xzf larry_v1.1.1_linux_amd64.tar.gz
 sudo mv larry /usr/local/bin/
 larry -version
 ```
@@ -217,13 +217,17 @@ Larry loads its configuration automatically from:
 ### Platform & Terminal Notes
 
 - **Omarchy Linux**: Larry automatically reads `~/.local/state/omarchy/current/theme/colors.toml` (and legacy `~/.config/omarchy/current/theme/colors.toml`) and hot-reloads colors live when you switch themes.
-- **Ghostty Users**: Ghostty binds `Ctrl+Shift+Arrow` by default (`jump_to_prompt` / tab switching). You can either use `Alt+Shift+Arrow` directly in Larry or unbind them in `~/.config/ghostty/config`:
+- **Ghostty Users**: Ghostty binds `Ctrl+Shift+Arrow` by default (`jump_to_prompt` / tab switching), and on macOS binds `Option+Left/Right` to `esc:b`/`esc:f` (instead of `alt+left`/`alt+right`). To send raw arrow chords to Larry, unbind them in `~/.config/ghostty/config`:
   ```ini
   keybind = ctrl+shift+arrow_up=unbind
   keybind = ctrl+shift+arrow_down=unbind
   keybind = ctrl+shift+arrow_left=unbind
   keybind = ctrl+shift+arrow_right=unbind
+  # macOS: send real alt+left / alt+right instead of esc:b / esc:f
+  keybind = alt+arrow_left=unbind
+  keybind = alt+arrow_right=unbind
   ```
+  *(If you unbind `alt+arrow_left/right` on macOS and want `Option+Left/Right` to keep jumping words in zsh, add `bindkey '^[[1;3D' backward-word` and `bindkey '^[[1;3C' forward-word` to `~/.zshrc`.)*
 - **macOS Users**: Since terminals rarely forward `Cmd`, set `"leader_key": "alt"` and map Option to Alt in your terminal preferences (Ghostty, Kitty, iTerm2, Alacritty).
 
 ## Lua Plugins

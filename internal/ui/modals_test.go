@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -145,6 +146,53 @@ func TestHelpMenuLayoutResponsiveAndScrollable(t *testing.T) {
 	for i, r := range strings.Split(narrowView, "\n") {
 		if w := lipgloss.Width(r); w > mNarrow.Width {
 			t.Fatalf("narrow help row %d width %d exceeded m.Width %d", i, w, mNarrow.Width)
+		}
+	}
+}
+
+func TestHelpMenuAndKeyMapAdaptToAltLeader(t *testing.T) {
+	// Normalizing mixed-case/whitespace leader_key prevents Alt+Left/Right conflicts.
+	km := NewKeyMap(" ALT ")
+	if key.Matches(tea.KeyMsg{Type: tea.KeyLeft, Alt: true}, km.PrevTab) {
+		t.Fatal("expected alt+left NOT to match PrevTab when leader is alt")
+	}
+	if key.Matches(tea.KeyMsg{Type: tea.KeyRight, Alt: true}, km.NextTab) {
+		t.Fatal("expected alt+right NOT to match NextTab when leader is alt")
+	}
+	if !key.Matches(tea.KeyMsg{Type: tea.KeyLeft, Alt: true}, km.JumpWordLeft) {
+		t.Fatal("expected alt+left to match JumpWordLeft when leader is alt")
+	}
+	if !key.Matches(tea.KeyMsg{Type: tea.KeyRight, Alt: true}, km.JumpWordRight) {
+		t.Fatal("expected alt+right to match JumpWordRight when leader is alt")
+	}
+	if !key.Matches(tea.KeyMsg{Type: tea.KeyCtrlLeft}, km.PrevTab) || !key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}, Alt: true}, km.PrevTab) {
+		t.Fatal("expected ctrl+left and alt+[ to match PrevTab when leader is alt")
+	}
+	if !key.Matches(tea.KeyMsg{Type: tea.KeyCtrlRight}, km.NextTab) || !key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}, Alt: true}, km.NextTab) {
+		t.Fatal("expected ctrl+right and alt+] to match NextTab when leader is alt")
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.LeaderKey = " ALT "
+	m := InitialModel("main.go", []string{"package main"}, cfg)
+	m.Width = 110
+	m.Height = 36
+	m.showHelp = true
+
+	plain := stripANSI(m.View())
+	for _, want := range []string{
+		"Leader: Alt",
+		"Ctrl+← / →",
+		"Prev/next (Alt+[])",
+		"Ctrl+p / F1",
+		"Ctrl+↑ / ↓",
+		"Alt+← / →",
+		"Jump word",
+		"Alt+↑ / ↓",
+		"Jump 5 lines",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected alt-leader help menu to contain %q, got:\n%s", want, plain)
 		}
 	}
 }

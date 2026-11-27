@@ -176,10 +176,7 @@ func (m Model) renderStatusBar() string {
 	}
 
 	// ── Shortcuts section ──
-	leader := strings.Title(m.Config.LeaderKey)
-	if leader == "" {
-		leader = "Ctrl"
-	}
+	leader := displayLeaderKey(m.Config.LeaderKey)
 
 	type shortcut struct {
 		Key  string

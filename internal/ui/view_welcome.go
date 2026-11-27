@@ -7,7 +7,7 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-var AppVersion = "v1.0.0"
+var AppVersion = "v1.1.1"
 
 func (m Model) viewWelcome() string {
 	width := m.mainContentWidth()
@@ -74,10 +74,7 @@ func (m Model) viewWelcome() string {
 		Italic(true)
 
 	// ── Leader key ──
-	leader := strings.Title(m.Config.LeaderKey)
-	if leader == "" {
-		leader = "Ctrl"
-	}
+	leader := displayLeaderKey(m.Config.LeaderKey)
 
 	// ── Uniform block width ──
 	blockWidth := 50

@@ -220,3 +220,17 @@ func TestSelectMultipleLinesWithCtrlShiftAndAltShiftArrows(t *testing.T) {
 		}
 	})
 }
+
+func TestUnboundAltKeyDoesNotInsertText(t *testing.T) {
+	m := InitialModel("test.txt", []string{"hello"}, config.DefaultConfig())
+	m.Width = 80
+	m.Height = 20
+	m.CursorRow = 0
+	m.CursorCol = 5
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true})
+	got := updated.(Model)
+	if got.Lines[0] != "hello" || got.Modified {
+		t.Fatalf("expected unbound Alt+x not to modify buffer, got line=%q modified=%v", got.Lines[0], got.Modified)
+	}
+}

@@ -486,7 +486,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.selecting = false
 		m.CursorRow, m.CursorCol = MoveToFileEnd(m.Lines)
 
-	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+	case !msg.Alt && (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace):
 		if m.hasMultiCursor() {
 			text := string(msg.Runes)
 			if msg.Type == tea.KeySpace {

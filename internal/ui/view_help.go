@@ -32,9 +32,11 @@ func (m Model) viewHelpMenu(base string) string {
 	p := activePalette
 	bg := helpStyle.GetBackground()
 
-	leader := strings.Title(m.Config.LeaderKey)
-	if leader == "" {
-		leader = "Ctrl"
+	leaderKey := normalizeLeaderKey(m.Config.LeaderKey)
+	leader := displayLeaderKey(leaderKey)
+	secondary := "Alt"
+	if leaderKey == "alt" {
+		secondary = "Ctrl"
 	}
 
 	leftSections := []helpSection{
@@ -46,10 +48,10 @@ func (m Model) viewHelpMenu(base string) string {
 				{leader + "+q", "Quit Larry"},
 				{leader + "+n", "New tab"},
 				{leader + "+d", "Close tab"},
-				{"Alt+← / →", "Prev / next tab"},
+				{secondary + "+← / →", "Prev/next (Alt+[])"},
 				{leader + "+l", "Toggle word wrap"},
 				{leader + "+u", "Markdown preview"},
-				{"Alt+p / F1", "Command palette"},
+				{secondary + "+p / F1", "Command palette"},
 				{leader + "+h", "Toggle help"},
 			},
 		},
@@ -96,7 +98,7 @@ func (m Model) viewHelpMenu(base string) string {
 			Items: []helpItem{
 				{leader + "+k / Alt+i", "Select next below"},
 				{leader + "+b", "Select all below"},
-				{"Alt+↑ / ↓", "Add cursor up/down"},
+				{secondary + "+↑ / ↓", "Add cursor up/down"},
 				{"Esc", "Clear extra cursors"},
 			},
 		},
