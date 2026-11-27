@@ -26,6 +26,7 @@ type KeyMap struct {
 	ToggleHelp         key.Binding
 	Search             key.Binding
 	Replace            key.Binding
+	GlobalReplace      key.Binding
 	GlobalFinder       key.Binding
 	// Agile Navigation
 	JumpWordLeft          key.Binding
@@ -70,6 +71,7 @@ func NewKeyMap(leader string) KeyMap {
 		ToggleHelp:         key.NewBinding(key.WithKeys(leader + "+h")),
 		Search:             key.NewBinding(key.WithKeys(leader + "+f")),
 		Replace:            key.NewBinding(key.WithKeys(leader + "+t")),
+		GlobalReplace:      key.NewBinding(key.WithKeys(leader + "+w")),
 		GlobalFinder:       key.NewBinding(key.WithKeys(leader + "+p")),
 		// Agile Navigation
 		JumpWordLeft:          key.NewBinding(key.WithKeys(leader + "+left")),

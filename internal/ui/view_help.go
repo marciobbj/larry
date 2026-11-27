@@ -33,6 +33,7 @@ func (m Model) viewHelpMenu(base string) string {
 		{leader + "+g", "Go to Line"},
 		{leader + "+f", "Search"},
 		{leader + "+t", "Replace"},
+		{leader + "+w", "Global Replace"},
 		{leader + "+p", "Global Finder"},
 		{leader + "+h", "Toggle Help"},
 		{leader + "+z", "Undo"},

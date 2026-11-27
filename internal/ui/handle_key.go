@@ -90,6 +90,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.textInput.Prompt = "Find: "
 		return m, nil
 
+	case key.Matches(msg, m.KeyMap.GlobalReplace):
+		m = m.openGlobalReplace()
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.GlobalFinder):
 		m.finding = true
 		finderWidth := m.Width

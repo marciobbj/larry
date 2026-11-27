@@ -19,6 +19,7 @@ A minimalist, high-performance TUI text editor written in Go.<br />
     - Very easy to use and navigate.
 - **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
 - **Global Finder**: Powerful multi-purpose search tool (`Leader+P`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
+- **Global Replace**: Project-scoped search & replace (`Leader+W`) with live match preview, per-file selection toggles, inline before/after diff preview, confirmation guard, and automatic active buffer sync.
 - **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
 - **UI**:
     - Clean, distraction-free interface
@@ -94,6 +95,7 @@ Leader key is ctrl by default.
 | **Focus File Tree / Editor** | `Leader+E` |
 | **Search** | `Leader+F` |
 | **Replace** | `Leader+T` |
+| **Global Replace** | `Leader+W` |
 | **Global Larry Finder** | `Leader+P` |
 | **Undo** | `Leader+Z` |
 | **Redo** | `Leader+R` |
@@ -146,6 +148,15 @@ The Global Finder is a powerful tool for navigating your project. Trigger it wit
 - **Smart Filtering**: Automatically ignores binary and compiled files to ensure a clean search experience.
 - **Navigate Results**: Use `Up`/`Down` arrows to navigate through the results and press `Enter` to open the selection.
 
+### Global Replace
+
+Replace text across the entire open project safely with live previews. Trigger it with `Leader+W`.
+
+- **Project Scope**: Operates strictly within the currently opened project root (matching the file tree root) and automatically ignores binary files, symlinks, and folders like `.git` or `node_modules`.
+- **Live Diff Preview**: Inspect matching files and inline `before → after` line previews as you type.
+- **Selective Replacement**: Use `Tab` to move to the results list and `Space` (or `Ctrl+A` / `a`) to include or exclude individual files before replacing.
+- **Confirmation & Buffer Sync**: Confirms before writing to disk and automatically refreshes the active editor buffer if the currently open file was modified.
+
 ## Configuration
 
 Larry is designed to be easily customizable via a JSON configuration file. 
@@ -197,7 +208,7 @@ larry -config path/to/your/config.json
 - [x] Replace
 - [x] Go to line
 - [x] Markdown instant visualization
-- [ ] Global Replace
+- [x] Global Replace
 - [x] Config file support
 - [x] Theme support
 - [x] Add Help Menu and Docs

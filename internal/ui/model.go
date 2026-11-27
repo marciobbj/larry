@@ -37,8 +37,10 @@ type Model struct {
 	goToLine           bool
 	searching          bool
 	replacing          bool
+	globalReplacing    bool
 	finding            bool
 	finder             FinderModel
+	globalReplace      GlobalReplaceModel
 	fileTree           FileTreeModel
 	textInput          textinput.Model
 	statusMsg          string
@@ -227,6 +229,10 @@ func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.showHelp = !m.showHelp
 		return m, nil
 
+	case key.Matches(msg, m.KeyMap.GlobalReplace):
+		m = m.openGlobalReplace()
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.GlobalFinder):
 		m.finding = true
 		finderWidth := m.Width
@@ -399,11 +405,127 @@ func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) openGlobalReplace() Model {
+	w := m.Width - 8
+	if w > 110 {
+		w = 110
+	}
+	if w < 40 {
+		w = 40
+	}
+	h := m.Height - 4
+	if h > 28 {
+		h = 28
+	}
+	if h < 14 {
+		h = 14
+	}
+	m.globalReplace = NewGlobalReplaceModel(m.fileTree.RootPath, w, h)
+	m.globalReplacing = true
+	return m
+}
+
+func (m Model) reloadActiveFileIfModified(modifiedPaths []string) Model {
+	if m.FileName == "" || len(modifiedPaths) == 0 {
+		return m
+	}
+	absCurrent, err := filepath.Abs(m.FileName)
+	if err != nil {
+		absCurrent = filepath.Clean(m.FileName)
+	} else {
+		absCurrent = filepath.Clean(absCurrent)
+	}
+
+	matched := false
+	for _, p := range modifiedPaths {
+		if filepath.Clean(p) == absCurrent {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return m
+	}
+
+	raw, err := os.ReadFile(absCurrent)
+	if err != nil {
+		return m
+	}
+	m.Lines = strings.Split(string(raw), "\n")
+	if len(m.Lines) == 0 {
+		m.Lines = []string{""}
+	}
+	if m.CursorRow >= len(m.Lines) {
+		m.CursorRow = len(m.Lines) - 1
+	}
+	if m.CursorRow < 0 {
+		m.CursorRow = 0
+	}
+	lineLen := len([]rune(m.Lines[m.CursorRow]))
+	if m.CursorCol > lineLen {
+		m.CursorCol = lineLen
+	}
+	m.UndoStack = nil
+	m.RedoStack = nil
+	m.selecting = false
+	m.Modified = false
+	m.markdownCacheValid = false
+	m.invalidateVisualCache()
+	return m.updateViewport()
+}
+
 func (m Model) Init() tea.Cmd {
 	return nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+
+	if m.globalReplacing {
+		if ws, ok := msg.(tea.WindowSizeMsg); ok {
+			m.Width = ws.Width
+			m.Height = ws.Height
+			m.fileTree.Height = m.editorViewportHeight()
+			grW := ws.Width - 8
+			if grW > 110 {
+				grW = 110
+			}
+			if grW < 40 {
+				grW = 40
+			}
+			grH := ws.Height - 4
+			if grH > 28 {
+				grH = 28
+			}
+			if grH < 14 {
+				grH = 14
+			}
+			m.globalReplace, _, _, _ = m.globalReplace.Update(tea.WindowSizeMsg{Width: grW, Height: grH})
+			return m, nil
+		}
+
+		var cmd tea.Cmd
+		var executed, closed bool
+		m.globalReplace, cmd, executed, closed = m.globalReplace.Update(msg)
+		if closed {
+			m.globalReplacing = false
+			return m, nil
+		}
+		if executed {
+			res, err := m.globalReplace.Execute()
+			m.globalReplacing = false
+			if err != nil {
+				m.statusMsg = "Global replace error: " + err.Error()
+			} else if len(res.Errors) > 0 {
+				m.statusMsg = fmt.Sprintf("Replaced %d in %d files (%d errors)", res.TotalReplacements, res.FilesModified, len(res.Errors))
+			} else {
+				m.statusMsg = fmt.Sprintf("Replaced %d occurrences in %d files", res.TotalReplacements, res.FilesModified)
+			}
+			m = m.reloadActiveFileIfModified(res.ModifiedFilePaths)
+			m.fileTree.Rebuild()
+			return m, nil
+		}
+		return m, cmd
+	}
 
 	if m.finding {
 		switch msg := msg.(type) {
@@ -668,6 +790,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case globalReplacePreviewMsg:
+		return m, nil
+
 	case searchMsg:
 		var cmd tea.Cmd
 		m.finder, cmd = m.finder.Update(msg)
@@ -720,6 +845,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			!key.Matches(msg, m.KeyMap.FocusTree) &&
 			!key.Matches(msg, m.KeyMap.ToggleHelp) &&
 			!key.Matches(msg, m.KeyMap.GlobalFinder) &&
+			!key.Matches(msg, m.KeyMap.GlobalReplace) &&
 			!key.Matches(msg, m.KeyMap.Quit) {
 			m.showWelcome = false
 		}
@@ -830,6 +956,46 @@ func (m Model) View() string {
 		replaceView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
 		return fmt.Sprintf("%s\n\n%s", baseView, replaceView)
 	}
+	if m.globalReplacing {
+		w := m.Width - 10
+		if w > 100 {
+			w = 100
+		}
+		if w < 36 {
+			w = 36
+		}
+		maxH := m.Height - 4
+		if maxH < 10 {
+			maxH = 10
+		}
+
+		bg := modalStyle.GetBackground()
+		spacerStyle := lipgloss.NewStyle().Background(bg)
+
+		titleText := "Global Replace"
+		title := modalTitleStyle.Width(w).Render(titleText)
+
+		body := m.globalReplace.View(w)
+		var allLines []string
+		allLines = append(allLines, title)
+		allLines = append(allLines, spacerStyle.Width(w).Render(""))
+
+		for i, line := range strings.Split(body, "\n") {
+			if i >= maxH-2 {
+				break
+			}
+			allLines = append(allLines, spacerStyle.Width(w).Render(line))
+		}
+
+		modal := modalStyle.Render(strings.Join(allLines, "\n"))
+
+		return lipgloss.Place(
+			m.Width, m.Height,
+			lipgloss.Center, lipgloss.Center,
+			modal,
+		)
+	}
+
 	if m.finding {
 		finderView := m.finder.View()
 		w := m.Width
