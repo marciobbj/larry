@@ -8,15 +8,18 @@ import (
 )
 
 type editorViewConfig struct {
-	width        int
-	height       int
-	showSearchUI bool
+	width          int
+	height         int
+	showSearchUI   bool
+	hideLeftBorder bool
 }
 
 func (m Model) viewEditor(cfg editorViewConfig) string {
 	if len(m.Lines) == 0 {
 		s := strings.Builder{}
-		s.WriteString(borderStyle.Render("│"))
+		if !cfg.hideLeftBorder {
+			s.WriteString(borderStyle.Render("│"))
+		}
 		if m.Config.LineNumbers {
 			s.WriteString(lineNumStyle.Render("   1 "))
 		}
@@ -46,7 +49,9 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 	if m.Config.LineNumbers {
 		textWidth -= 6
 	}
-	textWidth -= 1
+	if !cfg.hideLeftBorder {
+		textWidth -= 1
+	}
 	if textWidth < 1 {
 		textWidth = 1
 	}
@@ -81,7 +86,9 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 				return
 			}
 
-			s.WriteString(borderStyle.Render("│"))
+			if !cfg.hideLeftBorder {
+				s.WriteString(borderStyle.Render("│"))
+			}
 			if m.Config.LineNumbers {
 				if isFirst {
 					ln := fmt.Sprintf(" %3d ", lineNum+1)

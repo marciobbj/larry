@@ -10,16 +10,20 @@ var splitDividerStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("240"))
 
 func (m Model) viewSplit() string {
-	totalWidth := m.Width
+	totalWidth := m.mainContentWidth()
 	totalHeight := m.editorViewportHeight()
 
 	editorWidth := totalWidth / 2
 	previewWidth := totalWidth - editorWidth - 1
+	if previewWidth < 1 {
+		previewWidth = 1
+	}
 
 	editorView := m.viewEditor(editorViewConfig{
-		width:        editorWidth,
-		height:       totalHeight,
-		showSearchUI: m.searching,
+		width:          editorWidth,
+		height:         totalHeight,
+		showSearchUI:   m.searching,
+		hideLeftBorder: m.sidebarWidth() > 0,
 	})
 
 	previewView := m.viewMarkdownPreview(previewWidth, totalHeight)

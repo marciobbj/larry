@@ -10,7 +10,6 @@ import (
 	"larry/internal/config"
 	"larry/internal/search"
 
-	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -35,14 +34,13 @@ type Model struct {
 	startCol           int
 	selecting          bool
 	saving             bool
-	loading            bool
 	goToLine           bool
 	searching          bool
 	replacing          bool
 	finding            bool
 	finder             FinderModel
+	fileTree           FileTreeModel
 	textInput          textinput.Model
-	filePicker         filepicker.Model
 	statusMsg          string
 	yOffset            int
 	visualLineCounts   []int
@@ -90,20 +88,10 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 	ti.PromptStyle = textInputStyle
 	ti.TextStyle = textInputStyle
 
-	fp := filepicker.New()
-	fp.AllowedTypes = nil // All files
-	fp.CurrentDirectory, _ = os.Getwd()
-	fp.Height = 15
-	fp.ShowHidden = true
-	fp.Styles.Cursor = styleCursor
-	fp.Styles.Selected = styleSelected
-	fp.Styles.File = styleFile
-	fp.Styles.Directory = styleDir
-	fp.Styles.Permission = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(modalStyle.GetBackground())
-	fp.Styles.FileSize = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(modalStyle.GetBackground())
-	fp.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(modalStyle.GetBackground())
-	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Background(modalStyle.GetBackground())
-	fp.Styles.Selected = styleSelected
+	ft := NewFileTreeModel("")
+	if filename != "" {
+		ft.SetActiveFile(filename)
+	}
 
 	return Model{
 		Width:              80,
@@ -116,8 +104,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		selecting:          false,
 		textInput:          ti,
 		saving:             false,
-		loading:            false,
-		filePicker:         fp,
+		fileTree:           ft,
 		Lines:              lines,
 		CursorRow:          0,
 		CursorCol:          0,
@@ -137,6 +124,279 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		markdownRenderer:   nil,
 		showWelcome:        filename == "",
 	}
+}
+
+// OpenDirectory opens the collapsible lateral file tree rooted at dirPath.
+func (m *Model) OpenDirectory(dirPath string) {
+	m.fileTree = NewFileTreeModel(dirPath)
+	m.fileTree.Visible = true
+	m.fileTree.Focused = true
+	m.fileTree.Height = m.editorViewportHeight()
+}
+
+func (m Model) openFile(path string) (Model, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		m.statusMsg = "Error opening: " + err.Error()
+		return m, err
+	}
+
+	displayPath := path
+	if wd, wdErr := os.Getwd(); wdErr == nil {
+		if abs, absErr := filepath.Abs(path); absErr == nil {
+			if rel, relErr := filepath.Rel(wd, abs); relErr == nil && !strings.HasPrefix(rel, "..") {
+				displayPath = rel
+			}
+		}
+	}
+
+	m.Lines = strings.Split(string(content), "\n")
+	m.FileName = displayPath
+	m.CursorRow = 0
+	m.CursorCol = 0
+	m.yOffset = 0
+	m.UndoStack = nil
+	m.RedoStack = nil
+	m.selecting = false
+	m.Modified = false
+	m.showWelcome = false
+	m.viewMode = ViewModeEditor
+	m.markdownRenderer = nil
+	m.markdownCache = ""
+	m.markdownCacheValid = false
+	m.searchResults = nil
+	m.replaceResults = nil
+	m.currentResultIndex = -1
+	m.currReplaceIndex = -1
+	m.invalidateVisualCache()
+	m.fileTree.SetActiveFile(path)
+	m.statusMsg = "Opened: " + displayPath
+	return m, nil
+}
+
+func (m Model) syncMarkdownForLayout() Model {
+	if m.viewMode != ViewModeSplit && m.markdownRenderer == nil {
+		return m
+	}
+	mainW := m.mainContentWidth()
+	previewWidth := mainW - mainW/2 - 1
+	if err := m.initMarkdownRenderer(previewWidth); err != nil {
+		if m.viewMode == ViewModeSplit {
+			m.viewMode = ViewModeEditor
+			m.statusMsg = "Preview closed: " + err.Error()
+		}
+		m.markdownRenderer = nil
+	}
+	return m
+}
+
+func (m Model) toggleFileTree() Model {
+	if m.fileTree.Visible {
+		m.fileTree.Visible = false
+		m.fileTree.Focused = false
+	} else {
+		m.fileTree.Visible = true
+		m.fileTree.Focused = true
+		m.fileTree.Height = m.editorViewportHeight()
+		m.fileTree.Rebuild()
+		if m.FileName != "" {
+			m.fileTree.SetActiveFile(m.FileName)
+		}
+	}
+	m.invalidateVisualCache()
+	m = m.syncMarkdownForLayout()
+	m = m.updateViewport()
+	return m
+}
+
+func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.KeyMap.Quit):
+		m.Quitting = true
+		return m, tea.Quit
+
+	case key.Matches(msg, m.KeyMap.Open):
+		m = m.toggleFileTree()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.FocusTree):
+		m.fileTree.Focused = false
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.ToggleHelp):
+		m.showHelp = !m.showHelp
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.GlobalFinder):
+		m.finding = true
+		finderWidth := m.Width
+		if finderWidth > 120 {
+			finderWidth = 120
+		}
+		finderHeight := m.Height
+		if finderHeight > 25 {
+			finderHeight = 25
+		}
+		m.finder = NewFinderModel(finderWidth, finderHeight)
+		return m, m.finder.performSearch()
+
+	case key.Matches(msg, m.KeyMap.Save):
+		return m.handleKey(msg)
+
+	case key.Matches(msg, m.KeyMap.JumpLinesUp) || msg.Type == tea.KeyPgUp:
+		m.fileTree.MoveUp(5)
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.JumpLinesDown) || msg.Type == tea.KeyPgDown:
+		m.fileTree.MoveDown(5)
+		return m, nil
+	}
+
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyTab:
+		m.fileTree.Focused = false
+		return m, nil
+
+	case tea.KeyUp:
+		m.fileTree.MoveUp(1)
+		return m, nil
+
+	case tea.KeyDown:
+		m.fileTree.MoveDown(1)
+		return m, nil
+
+	case tea.KeyHome:
+		m.fileTree.MoveTop()
+		return m, nil
+
+	case tea.KeyEnd:
+		m.fileTree.MoveBottom()
+		return m, nil
+
+	case tea.KeyRight:
+		node, ok := m.fileTree.SelectedNode()
+		if !ok {
+			return m, nil
+		}
+		if node.IsDir {
+			m.fileTree.ExpandOrEnterChild()
+		} else {
+			var err error
+			m, err = m.openFile(node.Path)
+			if err == nil {
+				m.fileTree.Focused = false
+				m = m.updateViewport()
+			}
+		}
+		return m, nil
+
+	case tea.KeyLeft:
+		m.fileTree.CollapseOrParent()
+		return m, nil
+
+	case tea.KeyEnter:
+		node, ok := m.fileTree.SelectedNode()
+		if !ok {
+			return m, nil
+		}
+		if node.IsDir {
+			m.fileTree.ToggleExpand()
+		} else {
+			var err error
+			m, err = m.openFile(node.Path)
+			if err == nil {
+				m.fileTree.Focused = false
+				m = m.updateViewport()
+			}
+		}
+		return m, nil
+
+	case tea.KeySpace:
+		node, ok := m.fileTree.SelectedNode()
+		if !ok {
+			return m, nil
+		}
+		if node.IsDir {
+			m.fileTree.ToggleExpand()
+		} else {
+			var err error
+			m, err = m.openFile(node.Path)
+			if err == nil {
+				m = m.updateViewport()
+			}
+		}
+		return m, nil
+
+	case tea.KeyBackspace:
+		m.fileTree.GoUpDirectory()
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "j":
+		m.fileTree.MoveDown(1)
+	case "k":
+		m.fileTree.MoveUp(1)
+	case "l":
+		node, ok := m.fileTree.SelectedNode()
+		if ok {
+			if node.IsDir {
+				m.fileTree.ExpandOrEnterChild()
+			} else {
+				var err error
+				m, err = m.openFile(node.Path)
+				if err == nil {
+					m.fileTree.Focused = false
+					m = m.updateViewport()
+				}
+			}
+		}
+	case "h":
+		m.fileTree.CollapseOrParent()
+	case "o":
+		node, ok := m.fileTree.SelectedNode()
+		if ok {
+			if node.IsDir {
+				m.fileTree.ToggleExpand()
+			} else {
+				var err error
+				m, err = m.openFile(node.Path)
+				if err == nil {
+					m = m.updateViewport()
+				}
+			}
+		}
+	case "g":
+		m.fileTree.MoveTop()
+	case "G":
+		m.fileTree.MoveBottom()
+	case ".", "H":
+		m.fileTree.ToggleHidden()
+		if m.fileTree.ShowHidden {
+			m.statusMsg = "Showing hidden files"
+		} else {
+			m.statusMsg = "Hiding hidden files"
+		}
+	case "r":
+		m.fileTree.Rebuild()
+		m.statusMsg = "Tree refreshed"
+	case "-":
+		m.fileTree.GoUpDirectory()
+	case "]", ">":
+		m.fileTree.Resize(2, m.Width)
+		m.invalidateVisualCache()
+		m = m.syncMarkdownForLayout()
+		m = m.updateViewport()
+	case "[", "<":
+		m.fileTree.Resize(-2, m.Width)
+		m.invalidateVisualCache()
+		m = m.syncMarkdownForLayout()
+		m = m.updateViewport()
+	case "q":
+		m = m.toggleFileTree()
+	}
+
+	return m, nil
 }
 
 func (m Model) Init() tea.Cmd {
@@ -165,15 +425,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						targetRow = res.Grep.Line - 1
 					}
 
-					content, err := os.ReadFile(path)
+					var err error
+					m, err = m.openFile(path)
 					if err == nil {
-						m.Lines = strings.Split(string(content), "\n")
-						m.FileName = path
 						m.CursorRow = targetRow
 						m.CursorCol = 0
-						m.invalidateVisualCache()
 						m = m.updateViewport()
-						m.Modified = false
+						m.fileTree.Focused = false
 					}
 					m.finding = false
 					return m, nil
@@ -182,35 +440,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.finder, cmd = m.finder.Update(msg)
-		return m, cmd
-	}
-
-	if m.loading {
-		var cmd tea.Cmd
-		m.filePicker, cmd = m.filePicker.Update(msg)
-		if didSelect, path := m.filePicker.DidSelectFile(msg); didSelect {
-			content, err := os.ReadFile(path)
-			if err != nil {
-				m.statusMsg = "Error opening: " + err.Error()
-			} else {
-				m.Lines = strings.Split(string(content), "\n")
-				m.statusMsg = "Opened: " + path
-				m.FileName = path
-				m.CursorRow = 0
-				m.CursorCol = 0
-				m.yOffset = 0
-				m.invalidateVisualCache()
-				m.selecting = false
-				m.Modified = false
-				m.viewMode = ViewModeEditor
-				m.markdownRenderer = nil
-			}
-			m.loading = false
-			return m, cmd
-		}
-		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
-			m.loading = false
-		}
 		return m, cmd
 	}
 
@@ -234,6 +463,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "Saved: " + filename
 					m.FileName = filename
 					m.Modified = false
+					m.fileTree.Rebuild()
+					m.fileTree.SetActiveFile(filename)
 				}
 				m.saving = false
 				return m, nil
@@ -476,12 +707,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Dismiss the welcome screen on any key press
-		if m.showWelcome {
-			m.showWelcome = false
-		}
 		// Clear transient status messages on any key press
 		m.statusMsg = ""
+
+		if m.fileTree.Visible && m.fileTree.Focused {
+			return m.handleFileTreeKey(msg)
+		}
+
+		// Dismiss the welcome screen on editor key presses (keep it alongside the sidebar until a file is opened or edited)
+		if m.showWelcome &&
+			!key.Matches(msg, m.KeyMap.Open) &&
+			!key.Matches(msg, m.KeyMap.FocusTree) &&
+			!key.Matches(msg, m.KeyMap.ToggleHelp) &&
+			!key.Matches(msg, m.KeyMap.GlobalFinder) &&
+			!key.Matches(msg, m.KeyMap.Quit) {
+			m.showWelcome = false
+		}
+
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
 		if cmd != nil {
@@ -493,24 +735,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
+		m.fileTree.Height = m.editorViewportHeight()
 
 		// Always update markdown renderer if it exists or if we are in split mode
-		if m.viewMode == ViewModeSplit || m.markdownRenderer != nil {
-			previewWidth := msg.Width - msg.Width/2 - 1
-			if previewWidth < 20 {
-				previewWidth = 20
-			}
-			// Only re-init if width changed? Ideally yes, but for now just re-init to be safe.
-			// Actually initMarkdownRenderer is cheap enough? It creates a new glamour renderer.
-			if err := m.initMarkdownRenderer(previewWidth); err != nil {
-				if m.viewMode == ViewModeSplit {
-					m.viewMode = ViewModeEditor
-					m.statusMsg = "Preview error: " + err.Error()
-				}
-				// If not in split mode, just clear the renderer so we try again later
-				m.markdownRenderer = nil
-			}
-		}
+		m = m.syncMarkdownForLayout()
 
 		finderWidth := msg.Width
 		if finderWidth > 120 {
@@ -539,28 +767,41 @@ func (m Model) View() string {
 
 	status := m.renderStatusBar()
 
-	baseView := ""
+	viewportHeight := m.editorViewportHeight()
+	treeW := m.sidebarWidth()
+	mainW := m.mainContentWidth()
+
+	mainView := ""
 
 	if m.showWelcome {
-		baseView = m.viewWelcome()
+		mainView = m.viewWelcome()
 	} else if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
-		baseView = m.viewSplit()
-	} else if len(m.Lines) == 0 && !m.loading {
+		mainView = m.viewSplit()
+	} else if len(m.Lines) == 0 {
 		s := strings.Builder{}
-		s.WriteString(borderStyle.Render("│"))
+		if treeW == 0 {
+			s.WriteString(borderStyle.Render("│"))
+		}
 		if m.Config.LineNumbers {
 			s.WriteString(lineNumStyle.Render("   1 "))
 		}
 		s.WriteString(styleCursor.Render(" "))
 		s.WriteString("\n")
-		baseView = s.String()
+		mainView = s.String()
 	} else {
-		editorHeight := m.editorViewportHeight()
-		baseView = m.viewEditor(editorViewConfig{
-			width:        m.Width,
-			height:       editorHeight,
-			showSearchUI: m.searching,
+		mainView = m.viewEditor(editorViewConfig{
+			width:          mainW,
+			height:         viewportHeight,
+			showSearchUI:   m.searching,
+			hideLeftBorder: treeW > 0,
 		})
+	}
+
+	baseView := mainView
+	if treeW > 0 {
+		treeView := m.fileTree.View(treeW, viewportHeight)
+		divider := m.fileTree.DividerView(viewportHeight)
+		baseView = lipgloss.JoinHorizontal(lipgloss.Top, treeView, divider, mainView)
 	}
 
 	if m.saving {
@@ -630,52 +871,6 @@ func (m Model) View() string {
 			}
 			styledLine := strings.ReplaceAll(line, " ", spacerStyle.Render(" "))
 			allLines = append(allLines, spacerStyle.Width(w).Render(styledLine))
-		}
-
-		modal := modalStyle.Render(strings.Join(allLines, "\n"))
-
-		return lipgloss.Place(
-			m.Width, m.Height,
-			lipgloss.Center, lipgloss.Center,
-			modal,
-		)
-	}
-	if m.loading {
-		pickerView := m.filePicker.View()
-		w := lipgloss.Width(pickerView)
-		if w < 40 {
-			w = 40
-		}
-
-		bg := modalStyle.GetBackground()
-		spacerStyle := lipgloss.NewStyle().Background(bg)
-
-		titleText := "Open File"
-		titleGap := w - lipgloss.Width(titleText)
-		leftGap := titleGap / 2
-		rightGap := titleGap - leftGap
-		title := modalTitleStyle.Width(w).Render(strings.Repeat(" ", leftGap) + titleText + strings.Repeat(" ", rightGap))
-
-		var allLines []string
-		allLines = append(allLines, title)
-		allLines = append(allLines, spacerStyle.Copy().Width(w).Render(""))
-
-		pickerLines := strings.Split(pickerView, "\n")
-		for _, line := range pickerLines {
-			styledLine := strings.ReplaceAll(line, " ", spacerStyle.Render(" "))
-			allLines = append(allLines, spacerStyle.Width(w).Render(styledLine))
-		}
-
-		maxWidth := 0
-		for _, line := range allLines {
-			lw := lipgloss.Width(line)
-			if lw > maxWidth {
-				maxWidth = lw
-			}
-		}
-
-		for i, line := range allLines {
-			allLines[i] = spacerStyle.Copy().Width(maxWidth).Render(line)
 		}
 
 		modal := modalStyle.Render(strings.Join(allLines, "\n"))

@@ -14,6 +14,7 @@ type KeyMap struct {
 	Cut                key.Binding
 	Save               key.Binding
 	Open               key.Binding
+	FocusTree          key.Binding
 	CursorUp           key.Binding
 	CursorDown         key.Binding
 	CursorLeft         key.Binding
@@ -57,6 +58,7 @@ func NewKeyMap(leader string) KeyMap {
 		Cut:                key.NewBinding(key.WithKeys(leader + "+x")),
 		Save:               key.NewBinding(key.WithKeys(leader + "+s")),
 		Open:               key.NewBinding(key.WithKeys(leader + "+o")),
+		FocusTree:          key.NewBinding(key.WithKeys(leader + "+e")),
 		CursorUp:           key.NewBinding(key.WithKeys("up")),
 		CursorDown:         key.NewBinding(key.WithKeys("down")),
 		CursorLeft:         key.NewBinding(key.WithKeys("left")),

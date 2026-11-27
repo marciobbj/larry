@@ -116,7 +116,15 @@ func (m Model) renderStatusBar() string {
 
 	var shortcuts []shortcut
 
-	if len(m.searchResults) > 0 {
+	if m.fileTree.Visible && m.fileTree.Focused {
+		shortcuts = []shortcut{
+			{"Enter", "Open/Fold"},
+			{"←/→", "Collapse/Expand"},
+			{".", "Hidden"},
+			{"Esc", "Editor"},
+			{leader + "+o", "Hide"},
+		}
+	} else if len(m.searchResults) > 0 {
 		shortcuts = []shortcut{
 			{leader + "+f", "Search"},
 			{leader + "+h", "Help"},
@@ -130,13 +138,23 @@ func (m Model) renderStatusBar() string {
 		}
 		shortcuts = []shortcut{
 			{leader + "+u", previewLabel},
+			{leader + "+o", "Tree"},
 			{leader + "+h", "Help"},
 			{leader + "+s", "Save"},
 			{leader + "+q", "Quit"},
 		}
+	} else if m.fileTree.Visible {
+		shortcuts = []shortcut{
+			{leader + "+o", "Hide Tree"},
+			{leader + "+e", "Focus Tree"},
+			{leader + "+s", "Save"},
+			{leader + "+f", "Search"},
+			{leader + "+p", "Finder"},
+			{leader + "+q", "Quit"},
+		}
 	} else {
 		shortcuts = []shortcut{
-			{leader + "+o", "Open"},
+			{leader + "+o", "Tree"},
 			{leader + "+h", "Help"},
 			{leader + "+s", "Save"},
 			{leader + "+f", "Search"},

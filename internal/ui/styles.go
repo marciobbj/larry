@@ -24,6 +24,20 @@ var (
 	footerStyle    lipgloss.Style
 
 	textInputStyle lipgloss.Style
+
+	treeHeaderStyle          lipgloss.Style
+	treeHeaderFocusedStyle   lipgloss.Style
+	treeDividerStyle         lipgloss.Style
+	treeDividerFocusedStyle  lipgloss.Style
+	treeGuideStyle           lipgloss.Style
+	treeDirStyle             lipgloss.Style
+	treeFileStyle            lipgloss.Style
+	treeSymlinkStyle         lipgloss.Style
+	treeActiveFileStyle      lipgloss.Style
+	treeCursorFocusedStyle   lipgloss.Style
+	treeCursorUnfocusedStyle lipgloss.Style
+	treeEmptyStyle           lipgloss.Style
+	treeRuleStyle            lipgloss.Style
 )
 
 func initStyles() {
@@ -87,6 +101,20 @@ func initStyles() {
 			MarginTop(1)
 
 		textInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+
+		treeHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true)
+		treeHeaderFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("170")).Bold(true)
+		treeDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		treeDividerFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
+		treeGuideStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+		treeDirStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
+		treeFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+		treeSymlinkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
+		treeActiveFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("118")).Bold(true)
+		treeCursorFocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255")).Bold(true)
+		treeCursorUnfocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("237")).Foreground(lipgloss.Color("250"))
+		treeEmptyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
+		treeRuleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 	} else {
 		styleCursor = lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("255"))
 		styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("153")).Foreground(lipgloss.Color("0"))
@@ -145,5 +173,19 @@ func initStyles() {
 			MarginTop(1)
 
 		textInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0"))
+
+		treeHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Bold(true)
+		treeHeaderFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("125")).Bold(true)
+		treeDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+		treeDividerFocusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
+		treeGuideStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+		treeDirStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("27")).Bold(true)
+		treeFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("235"))
+		treeSymlinkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("31"))
+		treeActiveFileStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("22")).Bold(true)
+		treeCursorFocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("255")).Bold(true)
+		treeCursorUnfocusedStyle = lipgloss.NewStyle().Background(lipgloss.Color("252")).Foreground(lipgloss.Color("236"))
+		treeEmptyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
+		treeRuleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 	}
 }

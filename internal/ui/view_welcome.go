@@ -1,20 +1,22 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
+const AppVersion = "v0.1.0"
+
 func (m Model) viewWelcome() string {
-	width := m.Width
-	height := m.Height
+	width := m.mainContentWidth()
+	height := m.editorViewportHeight()
 	if width <= 0 {
 		width = 80
 	}
 	if height <= 0 {
-		height = 24
+		height = 23
 	}
 
 	isDark := lipgloss.HasDarkBackground()
@@ -29,29 +31,32 @@ func (m Model) viewWelcome() string {
 		descFgColor    lipgloss.Color
 		separatorColor lipgloss.Color
 		taglineColor   lipgloss.Color
-		versionColor   lipgloss.Color
+		versionBg      lipgloss.Color
+		versionFg      lipgloss.Color
 	)
 
 	if isDark {
 		accentColor = lipgloss.Color("170")    // purple/magenta
 		catColor = lipgloss.Color("252")       // bright white for the cat
-		dimColor = lipgloss.Color("240")       // dim gray
-		subtleColor = lipgloss.Color("245")    // subtle gray
+		dimColor = lipgloss.Color("242")       // dim gray
+		subtleColor = lipgloss.Color("246")    // subtle gray
 		keyColor = lipgloss.Color("118")       // green for keys
-		descFgColor = lipgloss.Color("250")    // light gray
+		descFgColor = lipgloss.Color("252")    // light gray
 		separatorColor = lipgloss.Color("238") // dark separator
-		taglineColor = lipgloss.Color("248")   // soft white
-		versionColor = lipgloss.Color("241")   // muted
+		taglineColor = lipgloss.Color("249")   // soft white
+		versionBg = lipgloss.Color("237")      // subtle pill bg
+		versionFg = lipgloss.Color("170")      // accent version text
 	} else {
 		accentColor = lipgloss.Color("125")    // magenta
 		catColor = lipgloss.Color("238")       // dark for the cat
 		dimColor = lipgloss.Color("244")       // gray
 		subtleColor = lipgloss.Color("240")    // darker gray
 		keyColor = lipgloss.Color("22")        // green for keys
-		descFgColor = lipgloss.Color("238")    // dark gray
-		separatorColor = lipgloss.Color("252") // light separator
+		descFgColor = lipgloss.Color("236")    // dark gray
+		separatorColor = lipgloss.Color("251") // light separator
 		taglineColor = lipgloss.Color("240")   // gray
-		versionColor = lipgloss.Color("248")   // muted
+		versionBg = lipgloss.Color("252")      // subtle pill bg
+		versionFg = lipgloss.Color("125")      // accent version text
 	}
 
 	// ── Styles ──
@@ -65,6 +70,12 @@ func (m Model) viewWelcome() string {
 	taglineStyle := lipgloss.NewStyle().
 		Foreground(taglineColor).
 		Italic(true)
+
+	versionStyle := lipgloss.NewStyle().
+		Foreground(versionFg).
+		Background(versionBg).
+		Bold(true).
+		Padding(0, 1)
 
 	separatorStyle := lipgloss.NewStyle().
 		Foreground(separatorColor)
@@ -84,101 +95,150 @@ func (m Model) viewWelcome() string {
 		Foreground(dimColor).
 		Italic(true)
 
-	versionStyle := lipgloss.NewStyle().
-		Foreground(versionColor)
-
 	// ── Leader key ──
 	leader := strings.Title(m.Config.LeaderKey)
 	if leader == "" {
 		leader = "Ctrl"
 	}
 
-	// ── ASCII Art ──
-	cat := []string{
-		`   /\_/\   `,
-		`  ( o.o )  `,
-		`   > ^ <   `,
+	// ── Uniform block width ──
+	blockWidth := 50
+	if width-4 < blockWidth {
+		blockWidth = width - 4
+	}
+	if blockWidth < 20 {
+		blockWidth = width
 	}
 
-	logoText := []string{
-		` ██       █████  ██████  ██████  ██    ██`,
-		` ██      ██   ██ ██   ██ ██   ██  ██  ██`,
-		` ██      ███████ ██████  ██████    ████  `,
-		` ██      ██   ██ ██   ██ ██   ██    ██   `,
-		` ███████ ██   ██ ██   ██ ██   ██    ██   `,
-	}
-	// ── Build content ──
-	var lines []string
-
-	// Cat on top
-	for _, line := range cat {
-		lines = append(lines, catStyle.Render(line))
+	centerLine := func(s string) string {
+		return lipgloss.NewStyle().Width(blockWidth).Align(lipgloss.Center).Render(s)
 	}
 
-	lines = append(lines, "")
-
-	// Logo below
-	for _, line := range logoText {
-		lines = append(lines, logoStyle.Render(line))
+	// ── Symmetrical Cat ASCII Art (exact 7-char lines) ──
+	catLines := []string{
+		` /\_/\ `,
+		`( o.o )`,
+		` > ^ < `,
 	}
 
-	lines = append(lines, "")
-
-	// Tagline
-	lines = append(lines, taglineStyle.Render("  A minimalist, high-performance text editor"))
-
-	lines = append(lines, "")
-
-	// Separator
-	sepWidth := 54
-	if width < sepWidth+10 {
-		sepWidth = width - 10
+	// ── Exact 40-char LARRY Logo ASCII Art ──
+	logoLines := []string{
+		`██       █████  ██████  ██████  ██    ██`,
+		`██      ██   ██ ██   ██ ██   ██  ██  ██ `,
+		`██      ███████ ██████  ██████    ████  `,
+		`██      ██   ██ ██   ██ ██   ██    ██   `,
+		`███████ ██   ██ ██   ██ ██   ██    ██   `,
 	}
-	if sepWidth < 20 {
-		sepWidth = 20
-	}
-	sep := separatorStyle.Render(strings.Repeat("─", sepWidth))
-	lines = append(lines, sep)
 
-	lines = append(lines, "")
-
-	// Quick Actions section
-	lines = append(lines, sectionTitleStyle.Render("  Quick Actions"))
-	lines = append(lines, "")
-
+	// ── Aligned Quick Actions Table ──
 	actions := []struct {
 		Key  string
 		Desc string
 	}{
-		{leader + "+o", "Open file"},
+		{leader + "+o", "Toggle file tree"},
 		{leader + "+p", "Larry Finder"},
 		{leader + "+h", "Help menu"},
 		{leader + "+s", "Save file"},
 		{leader + "+q", "Quit editor"},
 	}
 
+	maxKeyW := 0
+	maxDescW := 0
 	for _, a := range actions {
-		keyRendered := actionKeyStyle.Render(fmt.Sprintf("  %-10s", a.Key))
-		descRendered := actionDescStyle.Render(a.Desc)
-		lines = append(lines, keyRendered+" "+descRendered)
+		if kw := runewidth.StringWidth(a.Key); kw > maxKeyW {
+			maxKeyW = kw
+		}
+		if dw := runewidth.StringWidth(a.Desc); dw > maxDescW {
+			maxDescW = dw
+		}
 	}
 
-	lines = append(lines, "")
+	const colGap = "   "
+	actionRows := make([]string, 0, len(actions))
+	for _, a := range actions {
+		keyPadded := a.Key + strings.Repeat(" ", maxKeyW-runewidth.StringWidth(a.Key))
+		descPadded := a.Desc + strings.Repeat(" ", maxDescW-runewidth.StringWidth(a.Desc))
+		row := actionKeyStyle.Render(keyPadded) + colGap + actionDescStyle.Render(descPadded)
+		actionRows = append(actionRows, centerLine(row))
+	}
+
+	// ── Separator ──
+	sepWidth := blockWidth - 4
+	if sepWidth < 16 {
+		sepWidth = blockWidth
+	}
+	sep := centerLine(separatorStyle.Render(strings.Repeat("─", sepWidth)))
+
+	compact := height < 27
+	var lines []string
+
+	// Cat on top
+	for _, line := range catLines {
+		lines = append(lines, centerLine(catStyle.Render(line)))
+	}
+
+	if !compact {
+		lines = append(lines, centerLine(""))
+	}
+
+	// LARRY logo always centered (falls back only if pane is narrower than the 40-col art)
+	if blockWidth >= 40 {
+		for _, line := range logoLines {
+			lines = append(lines, centerLine(logoStyle.Render(line)))
+		}
+	} else {
+		lines = append(lines, centerLine(logoStyle.Render("L A R R Y")))
+	}
+
+	lines = append(lines, centerLine(""))
+
+	// Tagline & Version badge
+	tagline := "A minimalist, high-performance text editor"
+	if runewidth.StringWidth(tagline) > blockWidth {
+		tagline = "Minimalist TUI text editor"
+	}
+	lines = append(lines, centerLine(taglineStyle.Render(tagline)))
+	lines = append(lines, centerLine(versionStyle.Render("larry "+AppVersion)))
+
+	if !compact {
+		lines = append(lines, centerLine(""))
+	}
 	lines = append(lines, sep)
-	lines = append(lines, "")
+	if !compact {
+		lines = append(lines, centerLine(""))
+	}
+
+	// Quick Actions section
+	lines = append(lines, centerLine(sectionTitleStyle.Render("Quick Actions")))
+	if !compact {
+		lines = append(lines, centerLine(""))
+	}
+	lines = append(lines, actionRows...)
+
+	if !compact {
+		lines = append(lines, centerLine(""))
+	}
+	lines = append(lines, sep)
+	if !compact {
+		lines = append(lines, centerLine(""))
+	}
 
 	// Hint
-	lines = append(lines, hintStyle.Render("  Start typing to begin, or use a shortcut above"))
-	lines = append(lines, "")
+	hint := "Start typing to begin, or use a shortcut above"
+	if runewidth.StringWidth(hint) > blockWidth {
+		hint = "Start typing or use a shortcut"
+	}
+	lines = append(lines, centerLine(hintStyle.Render(hint)))
 
-	// Version
-	lines = append(lines, versionStyle.Render("  larry v0.1.0"))
+	if len(lines) > height {
+		lines = lines[:height]
+	}
 
 	content := strings.Join(lines, "\n")
 
-	// Center the whole block in the terminal
+	// Center the uniform-width block cleanly in the available pane
 	return lipgloss.Place(
-		width, height-1, // -1 for the status bar
+		width, height,
 		lipgloss.Center, lipgloss.Center,
 		content,
 	)

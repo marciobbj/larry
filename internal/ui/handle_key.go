@@ -18,18 +18,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if m.viewMode == ViewModeSplit {
 				m.viewMode = ViewModeEditor
 			} else {
-				previewWidth := m.Width - m.Width/2 - 1
-				if previewWidth < 20 {
-					previewWidth = 20
+				mainW := m.mainContentWidth()
+				previewWidth := mainW - mainW/2 - 1
+				if previewWidth < minPreviewWidth {
+					m.statusMsg = "Preview error: " + ErrPreviewTooNarrow.Error()
+					return m, nil
 				}
-				if m.markdownRenderer == nil {
-					if err := m.initMarkdownRenderer(previewWidth); err != nil {
-						m.statusMsg = "Preview error: " + err.Error()
-						return m, nil
-					}
+				if err := m.initMarkdownRenderer(previewWidth); err != nil {
+					m.statusMsg = "Preview error: " + err.Error()
+					return m, nil
 				}
 				m.viewMode = ViewModeSplit
 			}
+			m.invalidateVisualCache()
 		}
 		return m, nil
 
@@ -103,9 +104,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, m.finder.performSearch()
 
 	case key.Matches(msg, m.KeyMap.Open):
-		m.loading = true
-		m.filePicker.CurrentDirectory, _ = os.Getwd()
-		return m, m.filePicker.Init()
+		m = m.toggleFileTree()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.FocusTree):
+		if !m.fileTree.Visible {
+			m = m.toggleFileTree()
+		} else {
+			m.fileTree.Focused = !m.fileTree.Focused
+			if m.fileTree.Focused {
+				m.fileTree.Height = m.editorViewportHeight()
+				m.fileTree.Rebuild()
+			}
+		}
+		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Undo):
 		m = m.undo()

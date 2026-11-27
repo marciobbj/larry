@@ -15,7 +15,7 @@ A minimalist, high-performance TUI text editor written in Go.<br />
 - **Core Functionality**:
     - Navigate through your files fast like a cat with Larry Movements (more info in the key bindings section). 
     - Standard commands like copy, cut, paste, undo, redo, select all, etc. No need to learn new commands.
-    - File Loading/Saving using modern file picker
+    - Collapsible Neovim-style lateral file tree (`Leader+O`) for navigating directories and opening files without leaving the editor
     - Very easy to use and navigate.
 - **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
 - **Global Finder**: Powerful multi-purpose search tool (`Leader+P`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
@@ -90,7 +90,8 @@ Leader key is ctrl by default.
 |--------|----------|
 | **Quit** | `Leader+Q` |
 | **Save** | `Leader+S` |
-| **Open File** | `Leader+O` |
+| **Toggle File Tree** | `Leader+O` |
+| **Focus File Tree / Editor** | `Leader+E` |
 | **Search** | `Leader+F` |
 | **Replace** | `Leader+T` |
 | **Global Larry Finder** | `Leader+P` |

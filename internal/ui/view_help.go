@@ -28,7 +28,8 @@ func (m Model) viewHelpMenu(base string) string {
 	}{
 		{leader + "+q", "Quit"},
 		{leader + "+s", "Save"},
-		{leader + "+o", "Open File (Local)"},
+		{leader + "+o", "Toggle File Tree"},
+		{leader + "+e", "Focus File Tree"},
 		{leader + "+g", "Go to Line"},
 		{leader + "+f", "Search"},
 		{leader + "+t", "Replace"},
@@ -58,6 +59,10 @@ func (m Model) viewHelpMenu(base string) string {
 		{"Shift+Home/End", "Select to Start/End"},
 		{leader + "+Home", "File Start"},
 		{leader + "+End", "File End"},
+		{"Tree: ↑↓/jk", "Move in Tree"},
+		{"Tree: Enter/→/←", "Open / Fold Dir"},
+		{"Tree: . / - / []", "Hidden / Up / Size"},
+		{"Tree: Esc / q", "Editor / Collapse"},
 	}
 
 	bg := helpStyle.GetBackground()

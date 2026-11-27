@@ -154,21 +154,46 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 	return currentLineVisualLine
 }
 
-func (m Model) updateViewport() Model {
-	textWidth := m.Width
-	viewportHeight := m.editorViewportHeight()
+func (m Model) sidebarWidth() int {
+	return m.fileTree.EffectiveWidth(m.Width)
+}
 
+func (m Model) mainContentWidth() int {
+	sw := m.sidebarWidth()
+	if sw > 0 {
+		w := m.Width - sw - 1 // 1 column for vertical divider
+		if w < 1 {
+			return 1
+		}
+		return w
+	}
+	if m.Width < 1 {
+		return 1
+	}
+	return m.Width
+}
+
+func (m Model) editorTextWidth() int {
+	textWidth := m.mainContentWidth()
 	if m.viewMode == ViewModeSplit {
-		textWidth = m.Width / 2
+		textWidth = textWidth / 2
 	}
 
 	if m.Config.LineNumbers {
 		textWidth -= 6
 	}
-	textWidth -= 1
+	if m.sidebarWidth() == 0 {
+		textWidth -= 1
+	}
 	if textWidth < 1 {
 		textWidth = 1
 	}
+	return textWidth
+}
+
+func (m Model) updateViewport() Model {
+	textWidth := m.editorTextWidth()
+	viewportHeight := m.editorViewportHeight()
 
 	// Calculate absolute visual position of the cursor.
 	cursorVisualAbsPos := m.cursorVisualAbsPos(textWidth)
