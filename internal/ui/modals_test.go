@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -146,3 +148,64 @@ func TestHelpMenuLayoutResponsiveAndScrollable(t *testing.T) {
 		}
 	}
 }
+
+func TestGlobalFinderCachesFilesAndNavigatesFastWithLargeBuffer(t *testing.T) {
+	cfg := config.DefaultConfig()
+	bigLines := make([]string, 20000)
+	for i := range bigLines {
+		bigLines[i] = fmt.Sprintf("func line_%d() { println(\"value_%d\") }", i, i)
+	}
+
+	m := InitialModel("huge.go", bigLines, cfg)
+	m.Width = 110
+	m.Height = 32
+	m.showWelcome = false
+
+	m, cmd := m.openGlobalFinder()
+	if cmd == nil {
+		t.Fatal("expected initial finder scan command")
+	}
+
+	// Simulate initial scan completion with 2000 candidate paths
+	fakeFiles := make([]string, 2000)
+	for i := range fakeFiles {
+		fakeFiles[i] = fmt.Sprintf("pkg/module_%02d/file_%04d.go", i%20, i)
+	}
+	updated, _ := m.Update(searchMsg{
+		seq:   m.finder.searchSeq,
+		files: fakeFiles,
+		results: []search.FinderResult{
+			{Mode: search.ModeFiles, File: &search.FileResult{Path: fakeFiles[0]}},
+		},
+	})
+	m = updated.(Model)
+	if !m.finder.allFilesLoaded || len(m.finder.allFiles) != len(fakeFiles) {
+		t.Fatalf("expected allFiles cache to persist, loaded=%v len=%d", m.finder.allFilesLoaded, len(m.finder.allFiles))
+	}
+
+	// Typing a query must filter synchronously in-memory (nil cmd)
+	updated, nextCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	m = updated.(Model)
+	if nextCmd != nil {
+		t.Fatalf("expected synchronous cached filter (nil cmd), got non-nil cmd")
+	}
+	if len(m.finder.results) != finderMaxResults {
+		t.Fatalf("expected %d capped results, got %d", finderMaxResults, len(m.finder.results))
+	}
+
+	// Navigating 50 steps down + full View() render must stay blazing fast even with 20k-line buffer open
+	start := time.Now()
+	for i := 0; i < 50; i++ {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = updated.(Model)
+		_ = m.View()
+	}
+	elapsed := time.Since(start)
+	if m.finder.cursor != 50 {
+		t.Fatalf("expected cursor at 50, got %d", m.finder.cursor)
+	}
+	if elapsed > 250*time.Millisecond {
+		t.Fatalf("finder navigation + View() too slow: 50 frames took %v", elapsed)
+	}
+}
+

@@ -654,6 +654,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "esc":
+				m.finder.Cancel()
 				m.finding = false
 				return m, nil
 			case "enter":
@@ -677,6 +678,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m = m.updateViewport()
 						m.fileTree.Focused = false
 					}
+					m.finder.Cancel()
 					m.finding = false
 					return m, nil
 				}
@@ -1028,6 +1030,65 @@ func (m Model) View() string {
 		return "Tchau!\n"
 	}
 
+	// Fast path for full-screen modals: skip rendering the editor, syntax
+	// highlighting, git diff, file tree, and status bar when they are hidden
+	// behind a centered modal overlay.
+	if m.finding {
+		innerW, innerH := m.finderModalDims()
+		body := m.finder.Render(innerW, innerH)
+		modal := modalStyle.Render(body)
+
+		return lipgloss.Place(
+			m.Width, m.Height,
+			lipgloss.Center, lipgloss.Center,
+			modal,
+		)
+	}
+
+	if m.globalReplacing {
+		w := m.Width - 10
+		if w > 100 {
+			w = 100
+		}
+		if w < 36 {
+			w = 36
+		}
+		maxH := m.Height - 4
+		if maxH < 10 {
+			maxH = 10
+		}
+
+		bg := modalStyle.GetBackground()
+		spacerStyle := lipgloss.NewStyle().Background(bg)
+
+		titleText := "Global Replace"
+		title := modalTitleStyle.Width(w).Render(titleText)
+
+		body := m.globalReplace.View(w)
+		var allLines []string
+		allLines = append(allLines, title)
+		allLines = append(allLines, spacerStyle.Width(w).Render(""))
+
+		for i, line := range strings.Split(body, "\n") {
+			if i >= maxH-2 {
+				break
+			}
+			allLines = append(allLines, spacerStyle.Width(w).Render(line))
+		}
+
+		modal := modalStyle.Render(strings.Join(allLines, "\n"))
+
+		return lipgloss.Place(
+			m.Width, m.Height,
+			lipgloss.Center, lipgloss.Center,
+			modal,
+		)
+	}
+
+	if m.showHelp {
+		return m.viewHelpMenu("")
+	}
+
 	status := m.renderStatusBar()
 
 	wsHeight := m.workspaceHeight()
@@ -1103,61 +1164,6 @@ func (m Model) View() string {
 		}
 		replaceView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
 		return fmt.Sprintf("%s\n\n%s", baseView, replaceView)
-	}
-	if m.globalReplacing {
-		w := m.Width - 10
-		if w > 100 {
-			w = 100
-		}
-		if w < 36 {
-			w = 36
-		}
-		maxH := m.Height - 4
-		if maxH < 10 {
-			maxH = 10
-		}
-
-		bg := modalStyle.GetBackground()
-		spacerStyle := lipgloss.NewStyle().Background(bg)
-
-		titleText := "Global Replace"
-		title := modalTitleStyle.Width(w).Render(titleText)
-
-		body := m.globalReplace.View(w)
-		var allLines []string
-		allLines = append(allLines, title)
-		allLines = append(allLines, spacerStyle.Width(w).Render(""))
-
-		for i, line := range strings.Split(body, "\n") {
-			if i >= maxH-2 {
-				break
-			}
-			allLines = append(allLines, spacerStyle.Width(w).Render(line))
-		}
-
-		modal := modalStyle.Render(strings.Join(allLines, "\n"))
-
-		return lipgloss.Place(
-			m.Width, m.Height,
-			lipgloss.Center, lipgloss.Center,
-			modal,
-		)
-	}
-
-	if m.finding {
-		innerW, innerH := m.finderModalDims()
-		body := m.finder.Render(innerW, innerH)
-		modal := modalStyle.Render(body)
-
-		return lipgloss.Place(
-			m.Width, m.Height,
-			lipgloss.Center, lipgloss.Center,
-			modal,
-		)
-	}
-
-	if m.showHelp {
-		return m.viewHelpMenu(baseView)
 	}
 
 	// Pad baseView so the status bar is always at the bottom of the terminal

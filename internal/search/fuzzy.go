@@ -2,9 +2,13 @@ package search
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 )
 
@@ -74,25 +78,50 @@ func NewDirectoryScanner() *DirectoryScanner {
 			".idea":        true,
 			"dist":         true,
 			"build":        true,
+			"target":       true,
+			".cache":       true,
+			".next":        true,
+			".nuxt":        true,
+			".venv":        true,
+			"venv":         true,
+			"__pycache__":  true,
+			".gradle":      true,
+			".cargo":       true,
 		},
 	}
 }
 
+var binaryExtensions = map[string]bool{
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
+	".bmp": true, ".ico": true, ".tiff": true, ".psd": true, ".avif": true,
+	".pdf": true, ".doc": true, ".docx": true, ".xls": true, ".xlsx": true, ".ppt": true, ".pptx": true,
+	".zip": true, ".tar": true, ".gz": true, ".tgz": true, ".bz2": true, ".xz": true, ".7z": true, ".rar": true, ".zst": true,
+	".mp3": true, ".mp4": true, ".mkv": true, ".avi": true, ".mov": true, ".webm": true, ".wav": true, ".flac": true, ".ogg": true, ".m4a": true,
+	".woff": true, ".woff2": true, ".ttf": true, ".otf": true, ".eot": true,
+	".exe": true, ".dll": true, ".so": true, ".dylib": true, ".a": true, ".o": true, ".obj": true,
+	".pyc": true, ".pyo": true, ".class": true, ".jar": true, ".war": true, ".wasm": true,
+	".db": true, ".sqlite": true, ".sqlite3": true, ".bin": true, ".iso": true, ".img": true, ".deb": true, ".rpm": true,
+}
+
+// HasBinaryExtension returns true if the filename extension is a known binary format.
+func HasBinaryExtension(filePath string) bool {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	return ext != "" && binaryExtensions[ext]
+}
+
+// Scan returns non-binary files under root (checking content when needed).
 func (ds *DirectoryScanner) Scan(root string) ([]string, error) {
 	var files []string
-	var mu sync.Mutex
+	err := ds.walk(root, &files, true)
+	return files, err
+}
 
-	var walkErr error
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		walkErr = ds.walk(root, &files, &mu)
-	}()
-
-	wg.Wait()
-	return files, walkErr
+// ScanPaths quickly walks root collecting candidate file paths without opening
+// every file on disk, skipping ignored directories and known binary extensions.
+func (ds *DirectoryScanner) ScanPaths(root string) ([]string, error) {
+	var files []string
+	err := ds.walk(root, &files, false)
+	return files, err
 }
 
 // IsBinaryData inspects a byte slice (up to the first 8 KiB) to determine
@@ -163,6 +192,9 @@ func IsBinaryData(data []byte) bool {
 }
 
 func IsBinary(filePath string) bool {
+	if HasBinaryExtension(filePath) {
+		return true
+	}
 	f, err := os.Open(filePath)
 	if err != nil {
 		return false
@@ -174,29 +206,29 @@ func IsBinary(filePath string) bool {
 	return IsBinaryData(buf[:n])
 }
 
-func (ds *DirectoryScanner) walk(root string, files *[]string, mu *sync.Mutex) error {
+func (ds *DirectoryScanner) walk(root string, files *[]string, checkContent bool) error {
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	for _, entry := range entries {
-		fullPath := strings.Join([]string{root, entry.Name()}, string(os.PathSeparator))
+		name := entry.Name()
+		fullPath := strings.Join([]string{root, name}, string(os.PathSeparator))
 
 		if entry.IsDir() {
-			if ds.ignoreDirs[entry.Name()] {
+			if ds.ignoreDirs[name] {
 				continue
 			}
-			if err := ds.walk(fullPath, files, mu); err != nil {
-				return err
-			}
+			_ = ds.walk(fullPath, files, checkContent)
 		} else {
-			if IsBinary(fullPath) {
+			if HasBinaryExtension(fullPath) {
 				continue
 			}
-			mu.Lock()
+			if checkContent && IsBinary(fullPath) {
+				continue
+			}
 			*files = append(*files, fullPath)
-			mu.Unlock()
 		}
 	}
 
@@ -215,65 +247,107 @@ func NewLiveGrep() *LiveGrep {
 	}
 }
 
+const maxGrepFileSize = 2 * 1024 * 1024 // 2 MiB
+
 func (lg *LiveGrep) Search(root, pattern string) ([]GrepResult, error) {
 	if pattern == "" {
 		return nil, nil
 	}
-
-	files, err := lg.scanner.Scan(root)
+	files, err := lg.scanner.ScanPaths(root)
 	if err != nil {
 		return nil, err
 	}
+	return lg.SearchFiles(context.Background(), files, pattern, 0)
+}
+
+// SearchFiles greps pattern across a pre-scanned list of file paths using a
+// bounded worker pool, cancelling early once maxResults (> 0) are found or ctx
+// is cancelled.
+func (lg *LiveGrep) SearchFiles(ctx context.Context, files []string, pattern string, maxResults int) ([]GrepResult, error) {
+	if pattern == "" || len(files) == 0 {
+		return nil, nil
+	}
+
+	searchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	bm := NewBoyerMooreSearch(pattern)
+	patternBytes := []byte(pattern)
 
+	numWorkers := runtime.NumCPU()
+	if numWorkers > 8 {
+		numWorkers = 8
+	}
+	if numWorkers < 2 {
+		numWorkers = 2
+	}
+
+	jobs := make(chan string, numWorkers*4)
 	var results []GrepResult
 	var mu sync.Mutex
+	var found int64
+
 	var wg sync.WaitGroup
-
-	resultsChan := make(chan GrepResult, 100)
-
-	done := make(chan struct{})
-	go func() {
-		for res := range resultsChan {
-			mu.Lock()
-			results = append(results, res)
-			mu.Unlock()
-		}
-		close(done)
-	}()
-
-	// can only process 10 files at a time, this saves memory and prevents race conditions
-	semaphore := make(chan struct{}, 10)
-
-	for _, file := range files {
+	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
-		go func(filePath string) {
+		go func() {
 			defer wg.Done()
-			defer func() { <-semaphore }() // release execution
-			semaphore <- struct{}{} // start execution
-			
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				return
-			}
+			for filePath := range jobs {
+				if searchCtx.Err() != nil {
+					return
+				}
+				info, err := os.Stat(filePath)
+				if err != nil || info.IsDir() || info.Size() == 0 || info.Size() > maxGrepFileSize {
+					continue
+				}
+				content, err := os.ReadFile(filePath)
+				if err != nil || IsBinaryData(content) {
+					continue
+				}
+				// Fast pre-check before splitting lines
+				if !bytes.Contains(content, patternBytes) {
+					continue
+				}
 
-			lines := strings.Split(string(content), "\n")
-			for lineIdx, line := range lines {
-				if bm.SearchInText(line) != nil {
-					resultsChan <- GrepResult{
-						Path:    filePath,
-						Line:    lineIdx + 1,
-						Content: strings.TrimSpace(line),
+				lines := strings.Split(string(content), "\n")
+				for lineIdx, line := range lines {
+					if searchCtx.Err() != nil {
+						return
+					}
+					if bm.SearchInText(line) != nil {
+						mu.Lock()
+						if maxResults <= 0 || len(results) < maxResults {
+							results = append(results, GrepResult{
+								Path:    filePath,
+								Line:    lineIdx + 1,
+								Content: strings.TrimSpace(line),
+							})
+							n := atomic.AddInt64(&found, 1)
+							if maxResults > 0 && int(n) >= maxResults {
+								cancel()
+							}
+						}
+						mu.Unlock()
+						if maxResults > 0 && int(atomic.LoadInt64(&found)) >= maxResults {
+							return
+						}
 					}
 				}
 			}
-		}(file)
+		}()
 	}
 
+	for _, f := range files {
+		if searchCtx.Err() != nil {
+			break
+		}
+		select {
+		case jobs <- f:
+		case <-searchCtx.Done():
+		}
+	}
+	close(jobs)
 	wg.Wait()
-	close(resultsChan)
-	<-done
 
 	return results, nil
 }
