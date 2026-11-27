@@ -1,9 +1,11 @@
 package search
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 type FinderMode int
@@ -93,6 +95,73 @@ func (ds *DirectoryScanner) Scan(root string) ([]string, error) {
 	return files, walkErr
 }
 
+// IsBinaryData inspects a byte slice (up to the first 8 KiB) to determine
+// whether the content is binary rather than plain text.
+func IsBinaryData(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+
+	// Well-known binary file headers whose first bytes may be ASCII before
+	// compressed/binary streams (e.g. PDFs often start streams past 8 KiB).
+	if bytes.HasPrefix(data, []byte("%PDF-")) ||
+		bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")) ||
+		bytes.HasPrefix(data, []byte("\xff\xd8\xff")) ||
+		bytes.HasPrefix(data, []byte("GIF87a")) ||
+		bytes.HasPrefix(data, []byte("GIF89a")) ||
+		bytes.HasPrefix(data, []byte("PK\x03\x04")) ||
+		bytes.HasPrefix(data, []byte("\x7fELF")) ||
+		bytes.HasPrefix(data, []byte("\x1f\x8b")) {
+		return true
+	}
+
+	limit := len(data)
+	if limit > 8192 {
+		limit = 8192
+	}
+	sample := data[:limit]
+
+	// Any NUL byte in the first 8 KiB indicates binary data.
+	if bytes.IndexByte(sample, 0) >= 0 {
+		return true
+	}
+
+	checkLen := len(sample)
+	if len(data) > limit && checkLen > 3 {
+		checkLen -= 3
+	}
+
+	suspicious := 0
+	for i := 0; i < checkLen; {
+		b := sample[i]
+		if b < 0x20 {
+			if b != '\t' && b != '\n' && b != '\r' && b != '\f' && b != 0x1b {
+				suspicious++
+			}
+			i++
+			continue
+		}
+		if b == 0x7f {
+			suspicious++
+			i++
+			continue
+		}
+		if b < 0x80 {
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRune(sample[i:checkLen])
+		if r == utf8.RuneError && size == 1 {
+			suspicious++
+			i++
+			continue
+		}
+		i += size
+	}
+
+	return checkLen > 0 && suspicious*100/checkLen > 30
+}
+
 func IsBinary(filePath string) bool {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -100,14 +169,9 @@ func IsBinary(filePath string) bool {
 	}
 	defer f.Close()
 
-	buf := make([]byte, 512)
+	buf := make([]byte, 8192)
 	n, _ := f.Read(buf)
-	for i := 0; i < n; i++ {
-		if buf[i] == 0 {
-			return true
-		}
-	}
-	return false
+	return IsBinaryData(buf[:n])
 }
 
 func (ds *DirectoryScanner) walk(root string, files *[]string, mu *sync.Mutex) error {

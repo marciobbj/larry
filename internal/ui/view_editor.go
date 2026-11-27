@@ -125,7 +125,7 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 
 	textWidth := cfg.width
 	if m.Config.LineNumbers {
-		textWidth -= 6
+		textWidth -= lineNumberGutterWidth(len(m.Lines))
 	}
 	if !cfg.hideLeftBorder {
 		textWidth -= 1
@@ -153,6 +153,11 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 	}
 
 	lines := m.Lines
+	numDigits := lineNumberDigits(len(lines))
+	tabWidth := m.Config.TabWidth
+	if tabWidth < 1 {
+		tabWidth = 4
+	}
 	var s strings.Builder
 	visualLinesRendered := 0
 
@@ -185,18 +190,41 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 				s.WriteString(borderStyle.Render("│"))
 			}
 			if m.Config.LineNumbers {
-				s.WriteString(formatGutter(lineNum, isFirst, rs.gitChanges[lineNum]))
+				s.WriteString(formatGutter(lineNum, numDigits, isFirst, rs.gitChanges[lineNum]))
 			}
 
 			syntaxStyles := m.getStylesForLine(lineNum)
 
+			drawn := 0
 			for i := startIdx; i < endIdx; i++ {
 				ch := runes[i]
 				style, applyStyle, isDirectCursor := m.resolveCharStyle(lineNum, i, syntaxStyles, rs)
-				m.writeStyledChar(&s, ch, style, applyStyle, isDirectCursor)
+				if ch == '\t' {
+					rem := textWidth - drawn
+					if rem <= 0 {
+						break
+					}
+					tw := tabWidth
+					if tw > rem {
+						tw = rem
+					}
+					writeStyledSpaces(&s, tw, style, applyStyle, isDirectCursor)
+					drawn += tw
+					continue
+				}
+				visualChar, charWidth := sanitizeDisplayRune(ch)
+				if charWidth > 0 && drawn+charWidth > textWidth {
+					if drawn == 0 && textWidth >= 1 {
+						writeStyledVisual(&s, "·", style, applyStyle, isDirectCursor)
+						drawn++
+					}
+					break
+				}
+				writeStyledVisual(&s, visualChar, style, applyStyle, isDirectCursor)
+				drawn += charWidth
 			}
 
-			if endIdx == len(runes) && rs.hasNonSelectingCursorAtEOL(lineNum, len(runes)) {
+			if endIdx == len(runes) && rs.hasNonSelectingCursorAtEOL(lineNum, len(runes)) && drawn < textWidth {
 				s.WriteString(styleCursor.Render(" "))
 			}
 
@@ -217,12 +245,9 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		currentVisualWidth := 0
 		isFirst := true
 		for i := 0; i < len(lineRunes); i++ {
-			charWidth := 1
-			if lineRunes[i] == '\t' {
-				charWidth = m.Config.TabWidth
-			}
+			charWidth := displayRuneWidth(lineRunes[i], tabWidth)
 
-			if currentVisualWidth+charWidth > textWidth {
+			if currentVisualWidth > 0 && currentVisualWidth+charWidth > textWidth {
 				renderChunk(lineRunes, chunkStart, i, isFirst, currentVisualWidth)
 				chunkStart = i
 				currentVisualWidth = charWidth
@@ -246,6 +271,7 @@ func (m Model) viewEditorNoWrap(
 	rs editorRenderState,
 ) string {
 	lines := m.Lines
+	numDigits := lineNumberDigits(len(lines))
 	var s strings.Builder
 
 	startLine := m.yOffset
@@ -271,7 +297,7 @@ func (m Model) viewEditorNoWrap(
 			s.WriteString(borderStyle.Render("│"))
 		}
 		if m.Config.LineNumbers {
-			s.WriteString(formatGutter(lineNum, true, rs.gitChanges[lineNum]))
+			s.WriteString(formatGutter(lineNum, numDigits, true, rs.gitChanges[lineNum]))
 		}
 
 		lineRunes := []rune(lines[lineNum])
@@ -281,10 +307,7 @@ func (m Model) viewEditorNoWrap(
 		drawn := 0
 		for i := 0; i < len(lineRunes); i++ {
 			ch := lineRunes[i]
-			charWidth := 1
-			if ch == '\t' {
-				charWidth = tabWidth
-			}
+			charWidth := displayRuneWidth(ch, tabWidth)
 
 			charEnd := visCol + charWidth
 			if charEnd <= xOff {
@@ -309,24 +332,41 @@ func (m Model) viewEditorNoWrap(
 				}
 				sliceLen := visEnd - visStart
 				if sliceLen > 0 {
-					isCursorStart := isDirectCursor && visStart == visCol
-					if applyStyle {
-						if isCursorStart {
-							s.WriteString(styleCursor.Render(" "))
-							if sliceLen > 1 {
-								s.WriteString(strings.Repeat(" ", sliceLen-1))
-							}
-						} else {
-							s.WriteString(style.Render(strings.Repeat(" ", sliceLen)))
-						}
-					} else {
-						s.WriteString(strings.Repeat(" ", sliceLen))
+					if drawn+sliceLen > textWidth {
+						sliceLen = textWidth - drawn
 					}
-					drawn += sliceLen
+					if sliceLen > 0 {
+						isCursorStart := isDirectCursor && visStart == visCol
+						writeStyledSpaces(&s, sliceLen, style, applyStyle, isCursorStart)
+						drawn += sliceLen
+					}
 				}
 			} else {
-				m.writeStyledChar(&s, ch, style, applyStyle, isDirectCursor)
-				drawn++
+				visualChar, w := sanitizeDisplayRune(ch)
+				// Wide rune straddling the left horizontal scroll boundary:
+				// emit a single filler cell for its visible right half.
+				if visCol < xOff && charEnd > xOff {
+					visEnd := charEnd
+					if visEnd > xOff+textWidth {
+						visEnd = xOff + textWidth
+					}
+					rem := visEnd - xOff
+					if rem > textWidth-drawn {
+						rem = textWidth - drawn
+					}
+					if rem > 0 {
+						writeStyledSpaces(&s, rem, style, applyStyle, false)
+						drawn += rem
+					}
+				} else if w > 0 && drawn+w > textWidth {
+					// Wide rune does not fit in the remaining column(s): stop
+					// before exceeding textWidth so the terminal never wraps.
+					visCol = charEnd
+					break
+				} else {
+					writeStyledVisual(&s, visualChar, style, applyStyle, isDirectCursor)
+					drawn += w
+				}
 			}
 
 			visCol = charEnd
@@ -334,7 +374,7 @@ func (m Model) viewEditorNoWrap(
 
 		if rs.hasNonSelectingCursorAtEOL(lineNum, len(lineRunes)) {
 			eolCol := cursorVisualCol(lines[lineNum], len(lineRunes), tabWidth)
-			if eolCol >= xOff && eolCol < xOff+textWidth {
+			if eolCol >= xOff && eolCol < xOff+textWidth && drawn < textWidth {
 				s.WriteString(styleCursor.Render(" "))
 			}
 		}
@@ -349,8 +389,8 @@ func (m Model) viewEditorNoWrap(
 	return s.String()
 }
 
-func formatGutter(lineNum int, isFirst bool, change git.LineChange) string {
-	numStr := fmt.Sprintf("%3d ", lineNum+1)
+func formatGutter(lineNum, numDigits int, isFirst bool, change git.LineChange) string {
+	numStr := fmt.Sprintf("%*d ", numDigits, lineNum+1)
 	var signStyled string
 	switch change {
 	case git.LineAdded:
@@ -414,25 +454,40 @@ func (m Model) resolveCharStyle(
 	return style, applyStyle, isCursor && !cursorSelecting
 }
 
-func (m Model) writeStyledChar(
+func writeStyledSpaces(
 	s *strings.Builder,
-	ch rune,
+	count int,
+	style lipgloss.Style,
+	applyStyle bool,
+	isCursorStart bool,
+) {
+	if count <= 0 {
+		return
+	}
+	if applyStyle {
+		if isCursorStart {
+			s.WriteString(styleCursor.Render(" "))
+			if count > 1 {
+				s.WriteString(strings.Repeat(" ", count-1))
+			}
+		} else {
+			s.WriteString(style.Render(strings.Repeat(" ", count)))
+		}
+	} else {
+		s.WriteString(strings.Repeat(" ", count))
+	}
+}
+
+func writeStyledVisual(
+	s *strings.Builder,
+	visualChar string,
 	style lipgloss.Style,
 	applyStyle bool,
 	isDirectCursor bool,
 ) {
-	visualChar := string(ch)
-	if ch == '\t' {
-		visualChar = strings.Repeat(" ", m.Config.TabWidth)
-	}
-
 	if applyStyle {
 		if isDirectCursor {
-			if ch == '\t' {
-				s.WriteString(styleCursor.Render(" ") + strings.Repeat(" ", m.Config.TabWidth-1))
-			} else {
-				s.WriteString(styleCursor.Render(visualChar))
-			}
+			s.WriteString(styleCursor.Render(visualChar))
 		} else {
 			s.WriteString(style.Render(visualChar))
 		}

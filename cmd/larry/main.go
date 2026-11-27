@@ -9,6 +9,7 @@ import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"larry/internal/config"
+	"larry/internal/search"
 	"larry/internal/ui"
 	"os"
 )
@@ -39,6 +40,10 @@ func main() {
 			dirToOpen = args[0]
 		} else {
 			filename = args[0]
+			if search.IsBinary(filename) {
+				fmt.Fprintf(os.Stderr, "larry: cannot open binary file: %s\n", filename)
+				os.Exit(1)
+			}
 			file, err := os.Open(filename)
 			if err == nil {
 				defer file.Close()

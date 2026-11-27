@@ -4,7 +4,85 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strconv"
+	"unicode"
+
+	"github.com/mattn/go-runewidth"
 )
+
+// isUnsafeTerminalRune reports whether r is a control, bidi/format, or
+// separator rune that must never be written raw to the terminal because it
+// can move the cursor (e.g. \r, \b, \x0b, \x0c), inject ANSI escape sequences
+// (\x1b), or corrupt terminal column layout.
+func isUnsafeTerminalRune(r rune) bool {
+	if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+		return true
+	}
+	if unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r) {
+		return true
+	}
+	return false
+}
+
+// sanitizeDisplayRune converts a non-tab rune into a terminal-safe printable
+// string and returns its exact terminal cell width.
+func sanitizeDisplayRune(r rune) (string, int) {
+	// Fast path for printable ASCII
+	if r >= 0x20 && r <= 0x7e {
+		return string(r), 1
+	}
+	if r == '\t' {
+		return " ", 1
+	}
+	if isUnsafeTerminalRune(r) {
+		return "·", 1
+	}
+	if r == unicode.ReplacementChar {
+		return "\uFFFD", 1
+	}
+	w := runewidth.RuneWidth(r)
+	if w <= 0 {
+		if unicode.Is(unicode.Mn, r) {
+			return string(r), 0
+		}
+		return "·", 1
+	}
+	return string(r), w
+}
+
+// displayRuneWidth returns the exact number of terminal cells occupied by r.
+func displayRuneWidth(r rune, tabWidth int) int {
+	if r == '\t' {
+		if tabWidth < 1 {
+			return 4
+		}
+		return tabWidth
+	}
+	if r >= 0x20 && r <= 0x7e {
+		return 1
+	}
+	_, w := sanitizeDisplayRune(r)
+	return w
+}
+
+// lineNumberDigits returns the digit width used to format line numbers
+// (minimum 3 so lines 1..999 keep compact 3-digit padding).
+func lineNumberDigits(lineCount int) int {
+	if lineCount < 1000 {
+		return 3
+	}
+	return len(strconv.Itoa(lineCount))
+}
+
+// lineNumberGutterWidth returns the total columns reserved for the line-number
+// gutter (1 git sign + digits + 1 trailing space, minimum 6).
+func lineNumberGutterWidth(lineCount int) int {
+	w := 1 + lineNumberDigits(lineCount) + 1
+	if w < 6 {
+		return 6
+	}
+	return w
+}
 
 func Write(errorMessage string) {
 	f, err := os.OpenFile("larry.log", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
@@ -27,15 +105,15 @@ func countVisualLineCount(line string, textWidth int, tabWidth int) int {
 	if line == "" {
 		return 1
 	}
+	if tabWidth < 1 {
+		tabWidth = 4
+	}
 
 	visualWidth := 0
 	count := 1
 	for _, r := range line {
-		charWidth := 1
-		if r == '\t' {
-			charWidth = tabWidth
-		}
-		if visualWidth+charWidth > textWidth {
+		charWidth := displayRuneWidth(r, tabWidth)
+		if visualWidth > 0 && visualWidth+charWidth > textWidth {
 			count++
 			visualWidth = charWidth
 		} else {
@@ -137,14 +215,15 @@ func (m Model) getCursorVisualOffset(textWidth int) int {
 	}
 
 	line := []rune(m.Lines[row])
+	tabWidth := m.Config.TabWidth
+	if tabWidth < 1 {
+		tabWidth = 4
+	}
 	currentLineVisualLine := 0
 	visualWidth := 0
 	for i := 0; i < m.CursorCol && i < len(line); i++ {
-		charWidth := 1
-		if line[i] == '\t' {
-			charWidth = m.Config.TabWidth
-		}
-		if visualWidth+charWidth > textWidth {
+		charWidth := displayRuneWidth(line[i], tabWidth)
+		if visualWidth > 0 && visualWidth+charWidth > textWidth {
 			currentLineVisualLine++
 			visualWidth = charWidth
 		} else {
@@ -180,7 +259,7 @@ func (m Model) editorTextWidth() int {
 	}
 
 	if m.Config.LineNumbers {
-		textWidth -= 6
+		textWidth -= lineNumberGutterWidth(len(m.Lines))
 	}
 	if m.sidebarWidth() == 0 {
 		textWidth -= 1
@@ -204,11 +283,7 @@ func cursorVisualCol(line string, col int, tabWidth int) int {
 	}
 	visCol := 0
 	for i := 0; i < col; i++ {
-		if runes[i] == '\t' {
-			visCol += tabWidth
-		} else {
-			visCol++
-		}
+		visCol += displayRuneWidth(runes[i], tabWidth)
 	}
 	return visCol
 }

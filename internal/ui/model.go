@@ -188,7 +188,13 @@ func (m Model) openFile(path string) (Model, error) {
 		return m, err
 	}
 
-	newLines := strings.Split(string(content), "\n")
+	if search.IsBinaryData(content) {
+		m.statusMsg = "Binary file not supported: " + filepath.Base(path)
+		return m, fmt.Errorf("binary file not supported: %s", displayPath)
+	}
+
+	normalized := strings.ReplaceAll(string(content), "\r\n", "\n")
+	newLines := strings.Split(normalized, "\n")
 	if len(newLines) == 0 {
 		newLines = []string{""}
 	}
