@@ -31,7 +31,7 @@
 
 ## Why Larry?
 
-Larry sits in the sweet spot between **Nano** and **Neovim**: familiar shortcuts (`Ctrl+C/V/X/Z/S/F`), zero modal friction, and modern IDE ergonomics right inside your terminal — collapsible file tree, multi-file tabs, live Git diff signs, project-wide search & replace, split Markdown preview, and live Omarchy theming.
+Larry sits in the sweet spot between **Nano** and **Neovim**: familiar shortcuts (`Ctrl+C/V/X/Z/S/F`), zero modal friction, and modern IDE ergonomics right inside your terminal — collapsible file tree, multi-file tabs, live Git diff signs, project-wide search & replace, split Markdown preview, and live Omarchy theming (if you are cool).
 
 ## Features
 
