@@ -1,16 +1,8 @@
-```text
-                                     /\_/\
-                                    ( o.o )
-                                     > ^ <
-
-                    ██       █████  ██████  ██████  ██    ██
-                    ██      ██   ██ ██   ██ ██   ██  ██  ██
-                    ██      ███████ ██████  ██████    ████
-                    ██      ██   ██ ██   ██ ██   ██    ██
-                    ███████ ██   ██ ██   ██ ██   ██    ██
-```
-
 <div align="center">
+
+<img src="assets/larry.svg" alt="Larry" width="160" height="160">
+
+# Larry
 
 **A minimalist, high-performance TUI text editor written in Go.**<br />
 *More power than Nano, without the steep learning curve of Vim — made for humans.*
