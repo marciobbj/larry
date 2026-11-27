@@ -12,13 +12,17 @@ type OpType int
 const (
 	OpInsert OpType = iota
 	OpDelete
+	OpMultiEdit
 )
 
 type EditOp struct {
-	Type OpType
-	Row  int
-	Col  int
-	Text string
+	Type          OpType
+	Row           int
+	Col           int
+	Text          string
+	RangeEdits    []RangeEdit
+	BeforeCursors []CursorSelection
+	AfterCursors  []CursorSelection
 }
 
 var writeClipboard = func(m Model, text string) error {
@@ -301,6 +305,15 @@ func (m Model) undo() Model {
 		m.CursorRow = op.Row
 		m.CursorCol = op.Col
 		m = m.insertTextAtCursor(op.Text)
+
+	case OpMultiEdit:
+		// Reverse order of recorded edits restores the exact buffer in O(k) time/memory.
+		for i := len(op.RangeEdits) - 1; i >= 0; i-- {
+			e := op.RangeEdits[i]
+			applyRangeReplace(&m.Lines, e.StartRow, e.StartCol, e.NewRow, e.NewCol, e.OldText)
+		}
+		m.setAllCursors(cloneCursors(op.BeforeCursors))
+		m.markModified()
 	}
 
 	m.RedoStack = append(m.RedoStack, op)
@@ -337,6 +350,13 @@ func (m Model) redo() Model {
 		m.selecting = true
 		m = m.deleteSelectedText()
 		m.selecting = false
+
+	case OpMultiEdit:
+		for _, e := range op.RangeEdits {
+			applyRangeReplace(&m.Lines, e.StartRow, e.StartCol, e.EndRow, e.EndCol, e.NewText)
+		}
+		m.setAllCursors(cloneCursors(op.AfterCursors))
+		m.markModified()
 	}
 
 	m.UndoStack = append(m.UndoStack, op)

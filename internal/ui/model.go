@@ -63,6 +63,8 @@ type Model struct {
 	visualLineComputed int
 	syntaxCache        *fileSyntaxCache
 	gitDiffCache       *fileGitDiffCache
+	occCache           *occurrenceCache
+	extraCursors       []CursorSelection
 	Lines              []string
 	CursorRow          int
 	CursorCol          int
@@ -130,6 +132,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		fileTree:           ft,
 		syntaxCache:        &fileSyntaxCache{},
 		gitDiffCache:       &fileGitDiffCache{},
+		occCache:           &occurrenceCache{},
 		Lines:              lines,
 		CursorRow:          0,
 		CursorCol:          0,

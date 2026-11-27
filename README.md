@@ -44,6 +44,7 @@ Larry sits in the sweet spot between **Nano** and **Neovim**: familiar shortcuts
 - **Global Finder (`Leader+P`)**: Fast project-wide fuzzy file search and concurrent live grep (switch with `Tab`), automatically ignoring binary files and directories like `.git` or `node_modules`.
 - **Global Replace (`Leader+W`)**: Project-scoped search & replace with live `before → after` diff previews, per-file `[x]`/`[ ]` selection toggles, confirmation guard, and automatic buffer sync across all open tabs.
 - **Syntax Highlighting**: 200+ languages via `chroma` with cached full-file tokenization for multi-line constructs (XML tags/comments, Markdown fenced code blocks, embedded HTML in Markdown, and block comments), with O(H) fallback for huge files.
+- **Multi-Cursor & Occurrence Selection (`Leader+K` / `Alt+I`)**: Selecting a word highlights all matching occurrences below the cursor (VS Code style). Press `Leader+K` (or `Alt+I`) to add a cursor to the next occurrence below, `Leader+B` to select all occurrences below, or `Alt+↑`/`Alt+↓` to add vertical cursors — then edit, delete, copy/paste, and undo/redo all cursors simultaneously (`Esc` returns to single cursor).
 - **Word Wrap Toggle (`Leader+L`)**: No-wrap with smooth horizontal scrolling by default (clean consecutive line numbers with zero gaps), toggleable live to aligned word wrap anytime.
 - **Instant Markdown Preview (`Leader+U`)**: Side-by-side live rendered Markdown split view synchronized with your cursor position.
 - **Omarchy Native Theming**: Set `"theme": "omarchy"` (automatic default on Omarchy systems) to adopt your desktop color scheme across the entire UI and syntax highlighting — with **live reload** when you switch Omarchy themes.
@@ -174,6 +175,10 @@ larry -config ./custom_config.json myfile.txt
 | **Select Word Left / Right** | `Leader+Shift+←/→` *(or `Alt+Shift+←/→`)* |
 | **Select 5 Lines Up / Down** | `Leader+Shift+↑/↓` *(or `Alt+Shift+↑/↓`)* |
 | **Select to Line Start / End** | `Shift+Home` / `Shift+End` |
+| **Select Next Occurrence Below** | `Leader+K` or `Alt+I` |
+| **Select All Occurrences Below** | `Leader+B` or `Alt+Shift+I` |
+| **Add Cursor Above / Below** | `Alt+↑` / `Alt+↓` *(or `Ctrl+↑/↓` when `leader_key` is `alt`)* |
+| **Exit Multi-Cursor** | `Esc` |
 
 ## Search, Finder & Global Replace
 

@@ -86,6 +86,15 @@ func (m Model) renderStatusBar() string {
 			Render("WRAP")
 		fileSection += wrapBadge
 	}
+	if m.hasMultiCursor() {
+		cursorBadge := lipgloss.NewStyle().
+			Background(barBg).
+			Foreground(p.Green).
+			Bold(true).
+			Padding(0, 1).
+			Render(fmt.Sprintf("%d cursors", len(m.allCursors())))
+		fileSection += cursorBadge
+	}
 
 	// ── If there's a custom status message, show it simply ──
 	if m.statusMsg != "" {

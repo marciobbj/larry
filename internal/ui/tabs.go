@@ -120,6 +120,7 @@ func (m Model) loadTabState(idx int) Model {
 	m.startRow = tab.StartRow
 	m.startCol = tab.StartCol
 	m.selecting = tab.Selecting
+	m.extraCursors = nil
 	m.UndoStack = tab.UndoStack
 	m.RedoStack = tab.RedoStack
 	m.Modified = tab.Modified

@@ -50,6 +50,31 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.prevTab()
 		return m, nil
 
+	case msg.Type == tea.KeyEsc:
+		if m.hasMultiCursor() {
+			m.clearExtraCursors()
+			m.statusMsg = "Single cursor"
+		} else if m.selecting {
+			m.selecting = false
+		}
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.SelectNextOccurrence):
+		m = m.selectNextOccurrence()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.SelectAllOccurrences):
+		m = m.selectAllOccurrences()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.AddCursorUp):
+		m = m.addCursorAbove()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.AddCursorDown):
+		m = m.addCursorBelow()
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.ToggleWordWrap):
 		m.Config.WordWrap = !m.Config.WordWrap
 		m.xOffset = 0
@@ -163,6 +188,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.SelectAll):
+		m.clearExtraCursors()
 		m.startRow = 0
 		m.startCol = 0
 		m.CursorRow = len(m.Lines) - 1
@@ -174,6 +200,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Cut):
+		if m.hasMultiCursor() {
+			text := m.multiCopyText()
+			if err := writeClipboard(m, text); err != nil {
+				m.statusMsg = "Cut Error: " + err.Error()
+			} else {
+				m = m.multiInsertText("")
+				m.statusMsg = "Cut to clipboard"
+			}
+			return m, nil
+		}
 		if m.selecting {
 			text := m.getSelectedText()
 			err := writeClipboard(m, text)
@@ -203,6 +239,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Copy):
+		if m.hasMultiCursor() {
+			text := m.multiCopyText()
+			if err := m.clipboardWrite(text); err != nil {
+				m.statusMsg = "Copy Error: " + err.Error()
+			} else {
+				m.statusMsg = "Copied to clipboard"
+			}
+			return m, nil
+		}
 		if m.selecting {
 			text := m.getSelectedText()
 			err := m.clipboardWrite(text)
@@ -219,6 +264,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		text, err := readClipboard(m)
 		if err != nil {
 			m.statusMsg = "Paste Error: " + err.Error()
+		} else if m.hasMultiCursor() {
+			m = m.multiPaste(text)
+			m.statusMsg = "Pasted from clipboard"
 		} else {
 			m.pushUndo(EditOp{Type: OpInsert, Row: m.CursorRow, Col: m.CursorCol, Text: text})
 			m = m.insertTextAtCursor(text)
@@ -227,6 +275,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.CursorUp) || key.Matches(msg, m.KeyMap.MoveSelectionUp):
+		if m.hasMultiCursor() {
+			m = m.multiMove(func(lines []string, row, col int) (int, int) {
+				if row > 0 {
+					row--
+					col = clampInt(col, 0, lineRuneLen(lines, row))
+				}
+				return row, col
+			}, key.Matches(msg, m.KeyMap.MoveSelectionUp))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.MoveSelectionUp) {
 			if !m.selecting {
 				m.selecting = true
@@ -246,6 +304,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.KeyMap.CursorDown) || key.Matches(msg, m.KeyMap.MoveSelectionDown):
+		if m.hasMultiCursor() {
+			m = m.multiMove(func(lines []string, row, col int) (int, int) {
+				if row < len(lines)-1 {
+					row++
+					col = clampInt(col, 0, lineRuneLen(lines, row))
+				}
+				return row, col
+			}, key.Matches(msg, m.KeyMap.MoveSelectionDown))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.MoveSelectionDown) {
 			if !m.selecting {
 				m.selecting = true
@@ -263,6 +331,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.KeyMap.CursorLeft) || key.Matches(msg, m.KeyMap.MoveSelectionLeft):
+		if m.hasMultiCursor() {
+			m = m.multiMove(func(lines []string, row, col int) (int, int) {
+				if col > 0 {
+					col--
+				} else if row > 0 {
+					row--
+					col = lineRuneLen(lines, row)
+				}
+				return row, col
+			}, key.Matches(msg, m.KeyMap.MoveSelectionLeft))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.MoveSelectionLeft) {
 			if !m.selecting {
 				m.selecting = true
@@ -279,6 +359,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.KeyMap.CursorRight) || key.Matches(msg, m.KeyMap.MoveSelectionRight):
+		if m.hasMultiCursor() {
+			m = m.multiMove(func(lines []string, row, col int) (int, int) {
+				if col < lineRuneLen(lines, row) {
+					col++
+				} else if row < len(lines)-1 {
+					row++
+					col = 0
+				}
+				return row, col
+			}, key.Matches(msg, m.KeyMap.MoveSelectionRight))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.MoveSelectionRight) {
 			if !m.selecting {
 				m.selecting = true
@@ -296,6 +388,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.KeyMap.JumpWordRight) || key.Matches(msg, m.KeyMap.SelectWordRight):
+		if m.hasMultiCursor() {
+			m = m.multiMove(FindNextWordBoundary, key.Matches(msg, m.KeyMap.SelectWordRight))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.SelectWordRight) {
 			if !m.selecting {
 				m.selecting = true
@@ -307,6 +403,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.CursorRow, m.CursorCol = FindNextWordBoundary(m.Lines, m.CursorRow, m.CursorCol)
 
 	case key.Matches(msg, m.KeyMap.JumpWordLeft) || key.Matches(msg, m.KeyMap.SelectWordLeft):
+		if m.hasMultiCursor() {
+			m = m.multiMove(FindPrevWordBoundary, key.Matches(msg, m.KeyMap.SelectWordLeft))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.SelectWordLeft) {
 			if !m.selecting {
 				m.selecting = true
@@ -318,6 +418,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.CursorRow, m.CursorCol = FindPrevWordBoundary(m.Lines, m.CursorRow, m.CursorCol)
 
 	case key.Matches(msg, m.KeyMap.JumpLinesUp) || key.Matches(msg, m.KeyMap.SelectLinesUp):
+		if m.hasMultiCursor() {
+			m = m.multiMove(JumpLinesUp, key.Matches(msg, m.KeyMap.SelectLinesUp))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.SelectLinesUp) {
 			if !m.selecting {
 				m.selecting = true
@@ -329,6 +433,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.CursorRow, m.CursorCol = JumpLinesUp(m.Lines, m.CursorRow, m.CursorCol)
 
 	case key.Matches(msg, m.KeyMap.JumpLinesDown) || key.Matches(msg, m.KeyMap.SelectLinesDown):
+		if m.hasMultiCursor() {
+			m = m.multiMove(JumpLinesDown, key.Matches(msg, m.KeyMap.SelectLinesDown))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.SelectLinesDown) {
 			if !m.selecting {
 				m.selecting = true
@@ -340,6 +448,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.CursorRow, m.CursorCol = JumpLinesDown(m.Lines, m.CursorRow, m.CursorCol)
 
 	case key.Matches(msg, m.KeyMap.LineStart) || key.Matches(msg, m.KeyMap.SelectToLineStart):
+		if m.hasMultiCursor() {
+			m = m.multiMove(func(_ []string, row, col int) (int, int) {
+				return MoveToLineStart(row, col)
+			}, key.Matches(msg, m.KeyMap.SelectToLineStart))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.SelectToLineStart) {
 			if !m.selecting {
 				m.selecting = true
@@ -351,6 +465,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.CursorRow, m.CursorCol = MoveToLineStart(m.CursorRow, m.CursorCol)
 
 	case key.Matches(msg, m.KeyMap.LineEnd) || key.Matches(msg, m.KeyMap.SelectToLineEnd):
+		if m.hasMultiCursor() {
+			m = m.multiMove(func(lines []string, row, _ int) (int, int) {
+				return MoveToLineEnd(lines, row)
+			}, key.Matches(msg, m.KeyMap.SelectToLineEnd))
+			return m, nil
+		}
 		if key.Matches(msg, m.KeyMap.SelectToLineEnd) {
 			if !m.selecting {
 				m.selecting = true
@@ -362,14 +482,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.CursorRow, m.CursorCol = MoveToLineEnd(m.Lines, m.CursorRow)
 
 	case key.Matches(msg, m.KeyMap.FileStart):
+		m.clearExtraCursors()
 		m.selecting = false
 		m.CursorRow, m.CursorCol = MoveToFileStart()
 
 	case key.Matches(msg, m.KeyMap.FileEnd):
+		m.clearExtraCursors()
 		m.selecting = false
 		m.CursorRow, m.CursorCol = MoveToFileEnd(m.Lines)
 
 	case msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace:
+		if m.hasMultiCursor() {
+			text := string(msg.Runes)
+			if msg.Type == tea.KeySpace {
+				text = " "
+			}
+			m = m.multiInsertText(text)
+			return m, nil
+		}
 		if m.selecting {
 			text := m.getSelectedText()
 			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
@@ -396,6 +526,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 
 	case msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete || key.Matches(msg, m.KeyMap.Delete):
+		if m.hasMultiCursor() {
+			m = m.multiBackspace()
+			return m, nil
+		}
 		if m.selecting {
 			text := m.getSelectedText()
 			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})
@@ -424,6 +558,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 
 	case msg.Type == tea.KeyTab:
+		if m.hasMultiCursor() {
+			m = m.multiInsertText(strings.Repeat(" ", m.Config.TabWidth))
+			return m, nil
+		}
 		if m.selecting {
 			m.markModified()
 			startRow, _ := m.startRow, m.startCol
@@ -519,6 +657,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case msg.Type == tea.KeyEnter:
+		if m.hasMultiCursor() {
+			m = m.multiInsertText("\n")
+			return m, nil
+		}
 		if m.selecting {
 			text := m.getSelectedText()
 			m.pushUndo(EditOp{Type: OpDelete, Row: m.startRow, Col: m.startCol, Text: text})

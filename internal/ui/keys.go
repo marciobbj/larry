@@ -49,14 +49,22 @@ type KeyMap struct {
 	CloseTab              key.Binding
 	NextTab               key.Binding
 	PrevTab               key.Binding
+	SelectNextOccurrence  key.Binding
+	SelectAllOccurrences  key.Binding
+	AddCursorUp           key.Binding
+	AddCursorDown         key.Binding
 }
 
 func NewKeyMap(leader string) KeyMap {
 	prevTabKeys := []string{"alt+["}
 	nextTabKeys := []string{"alt+]"}
+	addCursorUpKeys := []string{"alt+up"}
+	addCursorDownKeys := []string{"alt+down"}
 	if leader == "alt" {
 		prevTabKeys = append(prevTabKeys, "ctrl+left")
 		nextTabKeys = append(nextTabKeys, "ctrl+right")
+		addCursorUpKeys = []string{"ctrl+up"}
+		addCursorDownKeys = []string{"ctrl+down"}
 	} else {
 		prevTabKeys = append(prevTabKeys, "alt+left")
 		nextTabKeys = append(nextTabKeys, "alt+right")
@@ -109,6 +117,10 @@ func NewKeyMap(leader string) KeyMap {
 		CloseTab:              key.NewBinding(key.WithKeys(leader + "+d")),
 		PrevTab:               key.NewBinding(key.WithKeys(prevTabKeys...)),
 		NextTab:               key.NewBinding(key.WithKeys(nextTabKeys...)),
+		SelectNextOccurrence:  key.NewBinding(key.WithKeys(leader+"+k", "alt+i")),
+		SelectAllOccurrences:  key.NewBinding(key.WithKeys(leader+"+b", "alt+I")),
+		AddCursorUp:           key.NewBinding(key.WithKeys(addCursorUpKeys...)),
+		AddCursorDown:         key.NewBinding(key.WithKeys(addCursorDownKeys...)),
 	}
 }
 

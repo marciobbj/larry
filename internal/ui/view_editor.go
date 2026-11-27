@@ -16,6 +16,99 @@ type editorViewConfig struct {
 	hideLeftBorder bool
 }
 
+type editorRenderState struct {
+	cursors     []CursorSelection
+	cursorsByRow map[int][]CursorSelection
+	occByRow    map[int][]colSpan
+	gitChanges  map[int]git.LineChange
+}
+
+func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderState {
+	cursors := m.allCursors()
+	byRow := make(map[int][]CursorSelection, len(cursors))
+	for _, c := range cursors {
+		if c.Row >= viewStartRow && c.Row < viewEndRow {
+			byRow[c.Row] = append(byRow[c.Row], c)
+		}
+	}
+	return editorRenderState{
+		cursors:      cursors,
+		cursorsByRow: byRow,
+		occByRow:     m.getVisibleOccurrences(viewStartRow, viewEndRow),
+		gitChanges:   m.gitLineChanges(),
+	}
+}
+
+func (rs editorRenderState) isSelected(row, col int) bool {
+	// Fast path: check cursors touching this row.
+	if len(rs.cursors) <= 8 {
+		for _, c := range rs.cursors {
+			if !c.Selecting {
+				continue
+			}
+			sr, sc, er, ec := c.normalizedBounds()
+			if row < sr || row > er {
+				continue
+			}
+			if row > sr && row < er {
+				return true
+			}
+			if row == sr && row == er {
+				if col >= sc && col < ec {
+					return true
+				}
+			} else if row == sr {
+				if col >= sc {
+					return true
+				}
+			} else if row == er {
+				if col < ec {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	// O(k_row) lookup when many cursors exist on a large file.
+	for _, c := range rs.cursorsByRow[row] {
+		if !c.Selecting {
+			continue
+		}
+		sr, sc, er, ec := c.normalizedBounds()
+		if row == sr && row == er && col >= sc && col < ec {
+			return true
+		}
+	}
+	return false
+}
+
+func (rs editorRenderState) isOccurrence(row, col int) bool {
+	for _, sp := range rs.occByRow[row] {
+		if col >= sp.start && col < sp.end {
+			return true
+		}
+	}
+	return false
+}
+
+func (rs editorRenderState) hasCursorAt(row, col int) (isCursor bool, isSelecting bool) {
+	for _, c := range rs.cursorsByRow[row] {
+		if c.Col == col {
+			return true, c.Selecting
+		}
+	}
+	return false, false
+}
+
+func (rs editorRenderState) hasNonSelectingCursorAtEOL(row, lineLen int) bool {
+	for _, c := range rs.cursorsByRow[row] {
+		if !c.Selecting && c.Col == lineLen {
+			return true
+		}
+	}
+	return false
+}
+
 func (m Model) viewEditor(cfg editorViewConfig) string {
 	if len(m.Lines) == 0 {
 		s := strings.Builder{}
@@ -29,23 +122,6 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		s.WriteString("\n")
 		return s.String()
 	}
-
-	selStartRow, selStartCol := -1, -1
-	selEndRow, selEndCol := -1, -1
-
-	if m.selecting {
-		sRow, sCol := m.startRow, m.startCol
-		eRow, eCol := m.CursorRow, m.CursorCol
-
-		if sRow > eRow || (sRow == eRow && sCol > eCol) {
-			sRow, sCol, eRow, eCol = eRow, eCol, sRow, sCol
-		}
-		selStartRow, selStartCol = sRow, sCol
-		selEndRow, selEndCol = eRow, eCol
-	}
-
-	cursorRow := m.CursorRow
-	cursorCol := m.CursorCol
 
 	textWidth := cfg.width
 	if m.Config.LineNumbers {
@@ -66,10 +142,14 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		maxVisualLines = 1
 	}
 
-	gitChanges := m.gitLineChanges()
-
 	if !m.Config.WordWrap {
-		return m.viewEditorNoWrap(cfg, textWidth, maxVisualLines, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol, gitChanges)
+		startLine := clampInt(m.yOffset, 0, len(m.Lines)-1)
+		endLine := startLine + maxVisualLines
+		if endLine > len(m.Lines) {
+			endLine = len(m.Lines)
+		}
+		rs := newEditorRenderState(m, startLine, endLine)
+		return m.viewEditorNoWrap(cfg, textWidth, maxVisualLines, rs)
 	}
 
 	lines := m.Lines
@@ -77,6 +157,11 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 	visualLinesRendered := 0
 
 	startLine, startVisualOffset := m.locateVisualOffset(m.yOffset, textWidth)
+	endLine := startLine + maxVisualLines + 1
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+	rs := newEditorRenderState(m, startLine, endLine)
 
 	for lineNum := startLine; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 		line := lines[lineNum]
@@ -100,18 +185,18 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 				s.WriteString(borderStyle.Render("│"))
 			}
 			if m.Config.LineNumbers {
-				s.WriteString(formatGutter(lineNum, isFirst, gitChanges[lineNum]))
+				s.WriteString(formatGutter(lineNum, isFirst, rs.gitChanges[lineNum]))
 			}
 
 			syntaxStyles := m.getStylesForLine(lineNum)
 
 			for i := startIdx; i < endIdx; i++ {
 				ch := runes[i]
-				style, applyStyle := m.resolveCharStyle(lineNum, i, syntaxStyles, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol)
-				m.writeStyledChar(&s, ch, lineNum, i, cursorRow, cursorCol, style, applyStyle)
+				style, applyStyle, isDirectCursor := m.resolveCharStyle(lineNum, i, syntaxStyles, rs)
+				m.writeStyledChar(&s, ch, style, applyStyle, isDirectCursor)
 			}
 
-			if !m.selecting && lineNum == cursorRow && cursorCol == len(runes) && endIdx == len(runes) {
+			if endIdx == len(runes) && rs.hasNonSelectingCursorAtEOL(lineNum, len(runes)) {
 				s.WriteString(styleCursor.Render(" "))
 			}
 
@@ -158,9 +243,7 @@ func (m Model) viewEditorNoWrap(
 	cfg editorViewConfig,
 	textWidth int,
 	maxVisualLines int,
-	selStartRow, selStartCol, selEndRow, selEndCol int,
-	cursorRow, cursorCol int,
-	gitChanges map[int]git.LineChange,
+	rs editorRenderState,
 ) string {
 	lines := m.Lines
 	var s strings.Builder
@@ -188,7 +271,7 @@ func (m Model) viewEditorNoWrap(
 			s.WriteString(borderStyle.Render("│"))
 		}
 		if m.Config.LineNumbers {
-			s.WriteString(formatGutter(lineNum, true, gitChanges[lineNum]))
+			s.WriteString(formatGutter(lineNum, true, rs.gitChanges[lineNum]))
 		}
 
 		lineRunes := []rune(lines[lineNum])
@@ -213,10 +296,9 @@ func (m Model) viewEditorNoWrap(
 				break
 			}
 
-			style, applyStyle := m.resolveCharStyle(lineNum, i, syntaxStyles, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol)
+			style, applyStyle, isDirectCursor := m.resolveCharStyle(lineNum, i, syntaxStyles, rs)
 
 			if ch == '\t' {
-				// Compute only the visible slice of expanded tab spaces
 				visStart := visCol
 				if visStart < xOff {
 					visStart = xOff
@@ -227,7 +309,7 @@ func (m Model) viewEditorNoWrap(
 				}
 				sliceLen := visEnd - visStart
 				if sliceLen > 0 {
-					isCursorStart := !m.selecting && lineNum == cursorRow && i == cursorCol && visStart == visCol
+					isCursorStart := isDirectCursor && visStart == visCol
 					if applyStyle {
 						if isCursorStart {
 							s.WriteString(styleCursor.Render(" "))
@@ -243,14 +325,14 @@ func (m Model) viewEditorNoWrap(
 					drawn += sliceLen
 				}
 			} else {
-				m.writeStyledChar(&s, ch, lineNum, i, cursorRow, cursorCol, style, applyStyle)
+				m.writeStyledChar(&s, ch, style, applyStyle, isDirectCursor)
 				drawn++
 			}
 
 			visCol = charEnd
 		}
 
-		if !m.selecting && lineNum == cursorRow && cursorCol == len(lineRunes) {
+		if rs.hasNonSelectingCursorAtEOL(lineNum, len(lineRunes)) {
 			eolCol := cursorVisualCol(lines[lineNum], len(lineRunes), tabWidth)
 			if eolCol >= xOff && eolCol < xOff+textWidth {
 				s.WriteString(styleCursor.Render(" "))
@@ -293,14 +375,18 @@ func formatGutter(lineNum int, isFirst bool, change git.LineChange) string {
 func (m Model) resolveCharStyle(
 	lineNum, i int,
 	syntaxStyles []lipgloss.Style,
-	selStartRow, selStartCol, selEndRow, selEndCol int,
-	cursorRow, cursorCol int,
-) (lipgloss.Style, bool) {
+	rs editorRenderState,
+) (lipgloss.Style, bool, bool) {
 	var style lipgloss.Style
 	applyStyle := false
 
 	if i < len(syntaxStyles) {
 		style = syntaxStyles[i]
+		applyStyle = true
+	}
+
+	if len(rs.occByRow) > 0 && rs.isOccurrence(lineNum, i) {
+		style = styleOccurrence
 		applyStyle = true
 	}
 
@@ -314,43 +400,26 @@ func (m Model) resolveCharStyle(
 		}
 	}
 
-	if m.selecting {
-		isSelected := false
-		if lineNum > selStartRow && lineNum < selEndRow {
-			isSelected = true
-		} else if lineNum == selStartRow && lineNum == selEndRow {
-			if i >= selStartCol && i < selEndCol {
-				isSelected = true
-			}
-		} else if lineNum == selStartRow {
-			if i >= selStartCol {
-				isSelected = true
-			}
-		} else if lineNum == selEndRow {
-			if i < selEndCol {
-				isSelected = true
-			}
-		}
-		if isSelected {
-			style = styleSelected
-			applyStyle = true
-		}
+	if rs.isSelected(lineNum, i) {
+		style = styleSelected
+		applyStyle = true
 	}
 
-	if lineNum == cursorRow && i == cursorCol {
+	isCursor, cursorSelecting := rs.hasCursorAt(lineNum, i)
+	if isCursor {
 		style = styleCursor
 		applyStyle = true
 	}
 
-	return style, applyStyle
+	return style, applyStyle, isCursor && !cursorSelecting
 }
 
 func (m Model) writeStyledChar(
 	s *strings.Builder,
 	ch rune,
-	lineNum, i, cursorRow, cursorCol int,
 	style lipgloss.Style,
 	applyStyle bool,
+	isDirectCursor bool,
 ) {
 	visualChar := string(ch)
 	if ch == '\t' {
@@ -358,7 +427,7 @@ func (m Model) writeStyledChar(
 	}
 
 	if applyStyle {
-		if !m.selecting && lineNum == cursorRow && i == cursorCol {
+		if isDirectCursor {
 			if ch == '\t' {
 				s.WriteString(styleCursor.Render(" ") + strings.Repeat(" ", m.Config.TabWidth-1))
 			} else {

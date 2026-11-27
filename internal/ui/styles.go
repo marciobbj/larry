@@ -29,9 +29,10 @@ type UIPalette struct {
 var (
 	activePalette = defaultPalette(true)
 
-	styleCursor   lipgloss.Style
-	styleSelected lipgloss.Style
-	styleSearch   lipgloss.Style
+	styleCursor     lipgloss.Style
+	styleSelected   lipgloss.Style
+	styleOccurrence lipgloss.Style
+	styleSearch     lipgloss.Style
 	styleFile     lipgloss.Style
 	styleDir      lipgloss.Style
 	lineNumStyle  lipgloss.Style
@@ -127,6 +128,7 @@ func initStyles() {
 
 	styleCursor = lipgloss.NewStyle().Background(p.CursorBg).Foreground(p.CursorFg)
 	styleSelected = lipgloss.NewStyle().Background(p.Selection).Foreground(p.SelectionFg)
+	styleOccurrence = lipgloss.NewStyle().Background(p.Surface).Foreground(p.Cyan).Underline(true)
 	styleSearch = lipgloss.NewStyle().Background(p.Yellow).Foreground(lipgloss.Color("0"))
 	styleFile = lipgloss.NewStyle().Foreground(p.Foreground).Background(p.Background)
 	styleDir = lipgloss.NewStyle().Foreground(p.Blue).Bold(true).Background(p.Background)
