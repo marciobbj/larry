@@ -8,7 +8,7 @@
 *More power than Nano, without the steep learning curve of Vim — made for humans.*
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
-[![License: MIT](https://img.shields.io/badge/License-MIT-a6e3a1?style=flat-square)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-a6e3a1?style=flat-square)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-v1.0.0-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
 
 </div>
@@ -239,4 +239,4 @@ Larry loads its configuration automatically from:
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+GNU General Public License v3.0 (GPL-3.0) — see [LICENSE](LICENSE) for details.
