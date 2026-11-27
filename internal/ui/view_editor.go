@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"larry/internal/git"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -64,8 +66,10 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		maxVisualLines = 1
 	}
 
+	gitChanges := m.gitLineChanges()
+
 	if !m.Config.WordWrap {
-		return m.viewEditorNoWrap(cfg, textWidth, maxVisualLines, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol)
+		return m.viewEditorNoWrap(cfg, textWidth, maxVisualLines, selStartRow, selStartCol, selEndRow, selEndCol, cursorRow, cursorCol, gitChanges)
 	}
 
 	lines := m.Lines
@@ -96,12 +100,7 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 				s.WriteString(borderStyle.Render("│"))
 			}
 			if m.Config.LineNumbers {
-				ln := fmt.Sprintf(" %3d ", lineNum+1)
-				if isFirst {
-					s.WriteString(lineNumStyle.Render(ln))
-				} else {
-					s.WriteString(lineNumStyle.Render(strings.Repeat(" ", len(ln))))
-				}
+				s.WriteString(formatGutter(lineNum, isFirst, gitChanges[lineNum]))
 			}
 
 			syntaxStyles := m.getStylesForLine(lineNum)
@@ -161,6 +160,7 @@ func (m Model) viewEditorNoWrap(
 	maxVisualLines int,
 	selStartRow, selStartCol, selEndRow, selEndCol int,
 	cursorRow, cursorCol int,
+	gitChanges map[int]git.LineChange,
 ) string {
 	lines := m.Lines
 	var s strings.Builder
@@ -188,8 +188,7 @@ func (m Model) viewEditorNoWrap(
 			s.WriteString(borderStyle.Render("│"))
 		}
 		if m.Config.LineNumbers {
-			ln := fmt.Sprintf(" %3d ", lineNum+1)
-			s.WriteString(lineNumStyle.Render(ln))
+			s.WriteString(formatGutter(lineNum, true, gitChanges[lineNum]))
 		}
 
 		lineRunes := []rune(lines[lineNum])
@@ -266,6 +265,29 @@ func (m Model) viewEditorNoWrap(
 	}
 
 	return s.String()
+}
+
+func formatGutter(lineNum int, isFirst bool, change git.LineChange) string {
+	numStr := fmt.Sprintf("%3d ", lineNum+1)
+	var signStyled string
+	switch change {
+	case git.LineAdded:
+		signStyled = gitAddedStyle.Render("▎")
+	case git.LineModified:
+		signStyled = gitModifiedStyle.Render("▎")
+	case git.LineDeletedBelow:
+		if isFirst {
+			signStyled = gitDeletedStyle.Render("▁")
+		} else {
+			signStyled = lineNumStyle.Render(" ")
+		}
+	default:
+		signStyled = lineNumStyle.Render(" ")
+	}
+	if isFirst {
+		return signStyled + lineNumStyle.Render(numStr)
+	}
+	return signStyled + lineNumStyle.Render(strings.Repeat(" ", len(numStr)))
 }
 
 func (m Model) resolveCharStyle(

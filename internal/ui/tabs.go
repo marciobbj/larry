@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"larry/internal/git"
 )
 
 // EditorTab stores the independent buffer, cursor, viewport, selection, and
@@ -23,6 +25,7 @@ type EditorTab struct {
 	RedoStack []EditOp
 	Modified  bool
 	ViewMode  ViewMode
+	GitBase   git.FileBase
 }
 
 func normalizeAbsPath(path string) string {
@@ -70,9 +73,14 @@ func (m *Model) ensureTabsInitialized() {
 
 func (m *Model) saveActiveTabState() {
 	m.ensureTabsInitialized()
+	existingBase := m.tabs[m.activeTab].GitBase
+	absPath := normalizeAbsPath(m.FileName)
+	if m.tabs[m.activeTab].AbsPath != absPath {
+		existingBase = git.FileBase{}
+	}
 	m.tabs[m.activeTab] = EditorTab{
 		FileName:  m.FileName,
-		AbsPath:   normalizeAbsPath(m.FileName),
+		AbsPath:   absPath,
 		Lines:     m.Lines,
 		CursorRow: m.CursorRow,
 		CursorCol: m.CursorCol,
@@ -85,6 +93,7 @@ func (m *Model) saveActiveTabState() {
 		RedoStack: m.RedoStack,
 		Modified:  m.Modified,
 		ViewMode:  m.viewMode,
+		GitBase:   existingBase,
 	}
 }
 
@@ -274,6 +283,7 @@ func (m Model) reloadModifiedTabs(modifiedPaths []string) Model {
 		tab.RedoStack = nil
 		tab.Selecting = false
 		tab.Modified = false
+		tab.GitBase = git.FileBase{}
 		if i == m.activeTab {
 			activeReloaded = true
 		}

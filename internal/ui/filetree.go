@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"larry/internal/git"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
@@ -41,6 +43,9 @@ type FileTreeModel struct {
 	Focused      bool
 	ShowHidden   bool
 	ActiveFile   string
+	GitBranch    string
+	gitStatuses  map[string]git.FileStatus
+	gitDirtyDirs map[string]bool
 	expanded     map[string]bool
 }
 
@@ -81,6 +86,7 @@ func (ft *FileTreeModel) Rebuild() {
 	}
 
 	ft.Nodes = ft.Nodes[:0]
+	ft.RefreshGitStatus()
 	ft.walkDir(ft.RootPath, 0, "")
 
 	if len(ft.Nodes) == 0 {
@@ -485,6 +491,43 @@ func (ft FileTreeModel) View(width, height int) string {
 	return strings.Join(lines[:height], "\n")
 }
 
+// RefreshGitStatus refreshes repository-level git file and folder markers.
+func (ft *FileTreeModel) RefreshGitStatus() {
+	status := git.GetRepoStatus(ft.RootPath)
+	if !status.InRepo {
+		ft.GitBranch = ""
+		ft.gitStatuses = nil
+		ft.gitDirtyDirs = nil
+		return
+	}
+	ft.GitBranch = status.Branch
+	ft.gitStatuses = status.FileStatuses
+	ft.gitDirtyDirs = status.DirtyDirs
+}
+
+func (ft FileTreeModel) nodeGitBadge(node TreeNode) (string, lipgloss.Style) {
+	clean := filepath.Clean(node.Path)
+	if node.IsDir {
+		if ft.gitDirtyDirs[clean] {
+			return "•", gitDirDirtyStyle
+		}
+		return "", lipgloss.Style{}
+	}
+	st := ft.gitStatuses[clean]
+	switch st {
+	case git.StatusModified, git.StatusRenamed:
+		return string(st), gitModifiedStyle
+	case git.StatusAdded:
+		return string(st), gitAddedStyle
+	case git.StatusUntracked:
+		return "?", gitUntrackedStyle
+	case git.StatusDeleted, git.StatusConflict:
+		return string(st), gitDeletedStyle
+	default:
+		return "", lipgloss.Style{}
+	}
+}
+
 func (ft FileTreeModel) renderNodeLine(node TreeNode, isSelected bool, width int) string {
 	// Leading padding + indent guides (2 chars per depth level)
 	guideRaw := " " + strings.Repeat("│ ", node.Depth)
@@ -512,20 +555,30 @@ func (ft FileTreeModel) renderNodeLine(node TreeNode, isSelected bool, width int
 		name += "@"
 	}
 
-	// When cursor is on this row and tree is focused, render a cohesive full-row highlight.
-	if isSelected && ft.Focused {
-		full := padOrTruncate(guideRaw+icon+name, width)
-		return treeCursorFocusedStyle.Render(full)
+	badge, badgeStyle := ft.nodeGitBadge(node)
+	badgeReserved := 0
+	if badge != "" && width >= 12 {
+		badgeReserved = 3 // " " + badge + " "
 	}
-	if isSelected && !ft.Focused {
+
+	// When cursor is on this row, render a cohesive full-row highlight (keeping git badge right-aligned).
+	if isSelected {
+		rowStyle := treeCursorUnfocusedStyle
+		if ft.Focused {
+			rowStyle = treeCursorFocusedStyle
+		}
+		if badgeReserved > 0 {
+			left := padOrTruncate(guideRaw+icon+name, width-badgeReserved)
+			return rowStyle.Render(left + " " + badge + " ")
+		}
 		full := padOrTruncate(guideRaw+icon+name, width)
-		return treeCursorUnfocusedStyle.Render(full)
+		return rowStyle.Render(full)
 	}
 
 	// Unselected row with per-part syntax/tree styling.
 	guideW := runewidth.StringWidth(guideRaw)
 	iconW := runewidth.StringWidth(icon)
-	availNameW := width - guideW - iconW
+	availNameW := width - guideW - iconW - badgeReserved
 
 	if availNameW <= 0 {
 		// Terminal/sidebar very narrow relative to depth: gracefully truncate raw text.
@@ -535,8 +588,8 @@ func (ft FileTreeModel) renderNodeLine(node TreeNode, isSelected bool, width int
 	truncatedName := truncateDisplay(name, availNameW)
 	usedW := guideW + iconW + runewidth.StringWidth(truncatedName)
 	trailingPad := ""
-	if usedW < width {
-		trailingPad = strings.Repeat(" ", width-usedW)
+	if usedW < width-badgeReserved {
+		trailingPad = strings.Repeat(" ", width-badgeReserved-usedW)
 	}
 
 	var nameStyle lipgloss.Style
@@ -566,6 +619,11 @@ func (ft FileTreeModel) renderNodeLine(node TreeNode, isSelected bool, width int
 	b.WriteString(iconStyle.Render(icon))
 	b.WriteString(nameStyle.Render(truncatedName))
 	b.WriteString(trailingPad)
+	if badgeReserved > 0 {
+		b.WriteString(" ")
+		b.WriteString(badgeStyle.Render(badge))
+		b.WriteString(" ")
+	}
 	return b.String()
 }
 

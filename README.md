@@ -21,6 +21,7 @@ A minimalist, high-performance TUI text editor written in Go.<br />
 - **Search & Navigation**: Efficient text search using Boyer-Moore algorithm with visual highlighting and result navigation.
 - **Global Finder**: Powerful multi-purpose search tool (`Leader+P`) supporting both fuzzy file searching and live text grep across the entire project. It automatically ignores binary/compiled files for a cleaner search experience.
 - **Global Replace**: Project-scoped search & replace (`Leader+W`) with live match preview, per-file selection toggles, inline before/after diff preview, confirmation guard, and automatic active buffer sync.
+- **Git Integration**: Live line-change markers (`▎` added/modified, `▁` deleted) right in the line-number gutter, modified/untracked file badges (`M`, `A`, `?`) and dirty folder indicators (`•`) in the lateral file tree, plus the current branch in the status bar.
 - **Syntax Highlighting**: Supports 200+ languages via `chroma`, automatically detected by file extension.
 - **UI**:
     - Clean, distraction-free interface

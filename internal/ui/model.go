@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"larry/internal/config"
+	"larry/internal/git"
 	"larry/internal/search"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -24,6 +25,14 @@ const (
 	ViewModeEditor ViewMode = iota
 	ViewModeSplit
 )
+
+type fileGitDiffCache struct {
+	absPath    string
+	contentVer int
+	lineCount  int
+	base       git.FileBase
+	changes    map[int]git.LineChange
+}
 
 type Model struct {
 	Width              int
@@ -53,6 +62,7 @@ type Model struct {
 	visualLineVersion  int
 	visualLineComputed int
 	syntaxCache        *fileSyntaxCache
+	gitDiffCache       *fileGitDiffCache
 	Lines              []string
 	CursorRow          int
 	CursorCol          int
@@ -119,6 +129,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		saving:             false,
 		fileTree:           ft,
 		syntaxCache:        &fileSyntaxCache{},
+		gitDiffCache:       &fileGitDiffCache{},
 		Lines:              lines,
 		CursorRow:          0,
 		CursorCol:          0,
@@ -475,6 +486,50 @@ func omarchyWatchTickCmd() tea.Cmd {
 	})
 }
 
+func (m Model) gitLineChanges() map[int]git.LineChange {
+	if m.FileName == "" || len(m.Lines) == 0 || m.gitDiffCache == nil {
+		return nil
+	}
+	absPath := normalizeAbsPath(m.FileName)
+	gc := m.gitDiffCache
+
+	if gc.absPath != absPath || !gc.base.Loaded {
+		// Reuse per-tab cached HEAD baseline if available.
+		var base git.FileBase
+		if m.activeTab >= 0 && m.activeTab < len(m.tabs) && m.tabs[m.activeTab].AbsPath == absPath && m.tabs[m.activeTab].GitBase.Loaded {
+			base = m.tabs[m.activeTab].GitBase
+		} else {
+			base = git.LoadFileBase(absPath)
+			if m.activeTab >= 0 && m.activeTab < len(m.tabs) && m.tabs[m.activeTab].AbsPath == absPath {
+				m.tabs[m.activeTab].GitBase = base
+			}
+		}
+		gc.absPath = absPath
+		gc.base = base
+		gc.contentVer = -1
+		gc.lineCount = -1
+	}
+
+	if gc.contentVer != m.visualLineVersion || gc.lineCount != len(m.Lines) {
+		gc.changes = git.ComputeLineChanges(gc.base, m.Lines)
+		gc.contentVer = m.visualLineVersion
+		gc.lineCount = len(m.Lines)
+	}
+
+	return gc.changes
+}
+
+func (m *Model) invalidateGitCache() {
+	if m.gitDiffCache != nil {
+		m.gitDiffCache.absPath = ""
+		m.gitDiffCache.base = git.FileBase{}
+		m.gitDiffCache.changes = nil
+	}
+	if m.activeTab >= 0 && m.activeTab < len(m.tabs) {
+		m.tabs[m.activeTab].GitBase = git.FileBase{}
+	}
+}
+
 func (m Model) Init() tea.Cmd {
 	if isOmarchyThemeName(m.Config.Theme) {
 		return omarchyWatchTickCmd()
@@ -606,6 +661,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.FileName = filename
 					m.Modified = false
 					m.saveActiveTabState()
+					m.invalidateGitCache()
 					m.fileTree.Rebuild()
 					m.fileTree.SetActiveFile(filename)
 				}

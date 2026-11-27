@@ -80,6 +80,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.statusMsg = "Saved: " + m.FileName
 				m.Modified = false
 				m.saveActiveTabState()
+				m.invalidateGitCache()
+				m.fileTree.RefreshGitStatus()
 			}
 			return m, nil
 		}

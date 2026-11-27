@@ -68,6 +68,15 @@ func (m Model) renderStatusBar() string {
 	if m.Modified {
 		fileSection += modifiedStyle.Render(" ● ")
 	}
+	if m.fileTree.GitBranch != "" && width >= 50 {
+		branchBadge := lipgloss.NewStyle().
+			Background(barBg).
+			Foreground(p.Cyan).
+			Bold(true).
+			Padding(0, 1).
+			Render("⎇ " + m.fileTree.GitBranch)
+		fileSection += branchBadge
+	}
 	if m.Config.WordWrap {
 		wrapBadge := lipgloss.NewStyle().
 			Background(barBg).

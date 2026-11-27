@@ -64,6 +64,12 @@ var (
 	treeCursorUnfocusedStyle lipgloss.Style
 	treeEmptyStyle           lipgloss.Style
 	treeRuleStyle            lipgloss.Style
+
+	gitAddedStyle     lipgloss.Style
+	gitModifiedStyle  lipgloss.Style
+	gitDeletedStyle   lipgloss.Style
+	gitUntrackedStyle lipgloss.Style
+	gitDirDirtyStyle  lipgloss.Style
 )
 
 func defaultPalette(isDark bool) UIPalette {
@@ -180,4 +186,10 @@ func initStyles() {
 	treeCursorUnfocusedStyle = lipgloss.NewStyle().Background(p.Surface).Foreground(p.SubtleFg)
 	treeEmptyStyle = lipgloss.NewStyle().Foreground(p.MutedFg).Italic(true)
 	treeRuleStyle = lipgloss.NewStyle().Foreground(p.Border)
+
+	gitAddedStyle = lipgloss.NewStyle().Foreground(p.Green).Bold(true)
+	gitModifiedStyle = lipgloss.NewStyle().Foreground(p.Yellow).Bold(true)
+	gitDeletedStyle = lipgloss.NewStyle().Foreground(p.Red).Bold(true)
+	gitUntrackedStyle = lipgloss.NewStyle().Foreground(p.Cyan).Bold(true)
+	gitDirDirtyStyle = lipgloss.NewStyle().Foreground(p.Yellow)
 }

@@ -81,14 +81,7 @@ func TestToggleWordWrapCommandAndAlignedContinuationGutter(t *testing.T) {
 
 	// Verify continuation line text aligns flush with first line text (same starting rune column after gutter)
 	firstTextCol := len([]rune(rows[0][:strings.Index(rows[0], "OpenTune")]))
-	row1Runes := []rune(rows[1])
-	secondTextCol := -1
-	for i := 1; i < len(row1Runes); i++ {
-		if row1Runes[i] != ' ' {
-			secondTextCol = i
-			break
-		}
-	}
+	secondTextCol := len([]rune(rows[1][:strings.Index(rows[1], "ce ")]))
 	if firstTextCol != secondTextCol {
 		t.Fatalf("wrapped continuation line misaligned: line0 col=%d, line1 col=%d\n%s", firstTextCol, secondTextCol, wrapped)
 	}
