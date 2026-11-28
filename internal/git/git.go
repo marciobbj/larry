@@ -76,7 +76,7 @@ func GetRepoStatus(dir string) RepoStatus {
 	branchOut, err := runGit(repoRoot, "rev-parse", "--abbrev-ref", "HEAD")
 	branch := ""
 	if err == nil {
-		branch = strings.TrimSpace(branchOut)
+		branch = strings.TrimPrefix(strings.TrimSpace(branchOut), "heads/")
 	}
 
 	statuses := make(map[string]FileStatus)
