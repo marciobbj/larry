@@ -51,6 +51,7 @@ type Manager struct {
 	currentPlugin string
 
 	plugins  []PluginInfo
+	builtIns []PluginInfo
 	hooks    map[EventName][]eventHandler
 	commands map[string]*registeredCommand
 	keymaps  map[string]*registeredKeymap
@@ -150,6 +151,9 @@ func (m *Manager) StartupNotice() string {
 	loaded := 0
 	failed := 0
 	for _, p := range m.plugins {
+		if p.BuiltIn {
+			continue
+		}
 		if p.Loaded {
 			loaded++
 		} else if p.Err != "" {
@@ -295,6 +299,26 @@ func (m *Manager) addPackagePath(dir string) {
 	if !strings.Contains(cur, extra) {
 		tbl.RawSetString("path", lua.LString(extra+";"+cur))
 	}
+}
+
+// RegisterBuiltIn registers a Go-native built-in plugin so it appears in the
+// loaded plugins panel and respects plugins.disabled configuration.
+func (m *Manager) RegisterBuiltIn(info PluginInfo) {
+	if m == nil {
+		return
+	}
+	info.BuiltIn = true
+	info.Path = "<built-in>"
+	info.Loaded = !m.cfg.Plugins.IsDisabled(info.Name)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, existing := range m.builtIns {
+		if existing.Name == info.Name {
+			m.builtIns[i] = info
+			return
+		}
+	}
+	m.builtIns = append(m.builtIns, info)
 }
 
 // Reload stops active LSP clients/timers, resets the Lua VM, and reloads all plugins.
@@ -541,8 +565,9 @@ func (m *Manager) Plugins() []PluginInfo {
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]PluginInfo, len(m.plugins))
-	copy(out, m.plugins)
+	out := make([]PluginInfo, 0, len(m.builtIns)+len(m.plugins))
+	out = append(out, m.builtIns...)
+	out = append(out, m.plugins...)
 	return out
 }
 

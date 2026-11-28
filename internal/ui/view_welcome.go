@@ -7,7 +7,7 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-var AppVersion = "v1.1.1"
+var AppVersion = "v1.2.0"
 
 func (m Model) viewWelcome() string {
 	width := m.mainContentWidth()

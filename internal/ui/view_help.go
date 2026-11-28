@@ -51,6 +51,7 @@ func (m Model) viewHelpMenu(base string) string {
 				{secondary + "+← / →", "Prev/next (Alt+[])"},
 				{leader + "+l", "Toggle word wrap"},
 				{leader + "+u", "Markdown preview"},
+				{secondary + "+t", "Switch colorscheme"},
 				{secondary + "+p / F1", "Command palette"},
 				{leader + "+h", "Toggle help"},
 			},

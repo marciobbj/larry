@@ -9,7 +9,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-a6e3a1?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v1.1.1-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
+[![Version](https://img.shields.io/badge/Version-v1.2.0-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
 
 </div>
 
@@ -56,7 +56,7 @@ Larry sits in the sweet spot between **Nano** and **Neovim**: familiar shortcuts
 Download the latest release archive for Linux, macOS, or Windows from [GitHub Releases](https://github.com/marciobbj/larry/releases/latest), extract it, and place `larry` on your `PATH`:
 
 ```bash
-tar -xzf larry_v1.1.1_linux_amd64.tar.gz
+tar -xzf larry_v1.2.0_linux_amd64.tar.gz
 sudo mv larry /usr/local/bin/
 larry -version
 ```
@@ -136,6 +136,7 @@ larry -config ./custom_config.json myfile.txt
 | **Indent / Dedent** | `Tab` / `Shift+Tab` |
 | **Toggle Word Wrap** | `Leader+L` |
 | **Markdown Split Preview** | `Leader+U` |
+| **Switch Colorscheme (43 Built-In Themes)** | `Alt+T` *(or `Ctrl+T` when `leader_key` is `alt`)* |
 | **Command Palette** | `Alt+P` or `F1` *(or `Ctrl+P` when `leader_key` is `alt`)* |
 | **Toggle Help Menu** | `Leader+H` |
 

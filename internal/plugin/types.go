@@ -117,6 +117,7 @@ type PluginInfo struct {
 	Version     string
 	Description string
 	Author      string
+	BuiltIn     bool
 	Loaded      bool
 	Err         string
 }

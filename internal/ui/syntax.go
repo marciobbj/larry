@@ -191,11 +191,18 @@ func SetTheme(themeName string) {
 	omarchyActive = false
 	omarchyColorPath = ""
 	omarchySignature = ""
-	activePalette = defaultPalette(lipgloss.HasDarkBackground())
 
-	if themeName == "dracula" && !lipgloss.HasDarkBackground() {
-		themeName = "github"
+	if cs, ok := LookupColorScheme(themeName); ok {
+		if customStyle, err := BuildChromaStyleFromColors(cs.ID, cs.Colors); err == nil {
+			theme = customStyle
+			activePalette = paletteFromOmarchy(cs.Colors)
+			clearSyntaxCache()
+			initStyles()
+			return
+		}
 	}
+
+	activePalette = defaultPalette(lipgloss.HasDarkBackground())
 
 	t := styles.Get(themeName)
 	if t == nil {
