@@ -200,12 +200,15 @@ func (m *Model) renderStatusBarUncached(width int) string {
 	var rightStr string
 	var rightW int
 
-	// Reserve minimum room for left mode + short file + active badges before sizing right side.
+	// Reserve minimum room for left mode + branch + short file + active badges before sizing right side.
 	totalBadgesW := 0
 	for _, b := range badges {
 		totalBadgesW += b.width
 	}
 	minLeft := modeSeg.width + 12 + totalBadgesW
+	if branchSeg.width > 0 && width >= 50 {
+		minLeft += branchSeg.width
+	}
 	if maxMinLeft := width * 60 / 100; minLeft > maxMinLeft {
 		minLeft = maxMinLeft
 	}
