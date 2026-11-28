@@ -1309,7 +1309,13 @@ func (m Model) View() string {
 		statusHeight = 1
 	}
 
-	wsHeight := m.Height - statusHeight
+	hasPrompt := m.saving || m.goToLine || m.searching || m.replacing
+	promptHeight := 0
+	if hasPrompt {
+		promptHeight = 2 // 1 divider rule + 1 full-width styled prompt bar
+	}
+
+	wsHeight := m.Height - statusHeight - promptHeight
 	if wsHeight < 1 {
 		wsHeight = 1
 	}
@@ -1346,7 +1352,7 @@ func (m Model) View() string {
 			editorArea = m.viewEditor(editorViewConfig{
 				width:          mainW,
 				height:         editorHeight,
-				showSearchUI:   m.searching,
+				showSearchUI:   false,
 				hideLeftBorder: treeW > 0,
 			})
 		}
@@ -1367,36 +1373,9 @@ func (m Model) View() string {
 		baseView = joinSidebarAndMain(treeView, divider, mainView, treeW, mainW, wsHeight, uiANSI)
 	}
 
-	if m.saving {
-		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
-	}
-	if m.goToLine {
-		return fmt.Sprintf("%s\n\n%s", baseView, m.textInput.View())
-	}
-	if m.searching {
-		var counter string
-		if len(m.searchResults) > 0 {
-			counter = fmt.Sprintf(" (%d/%d)", m.currentResultIndex+1, len(m.searchResults))
-		} else if m.searchQuery != "" {
-			counter = " (no results)"
-		}
-		searchView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
-		return fmt.Sprintf("%s\n\n%s", baseView, searchView)
-	}
-	if m.replacing {
-		var counter string
-		if len(m.replaceResults) > 0 {
-			counter = fmt.Sprintf(" (%d/%d)", m.currReplaceIndex+1, len(m.replaceResults))
-		} else if m.replaceQuery != "" && m.replaceStep >= 2 {
-			counter = " (no results)"
-		}
-		replaceView := fmt.Sprintf("%s%s", m.textInput.View(), counter)
-		return fmt.Sprintf("%s\n\n%s", baseView, replaceView)
-	}
-
-	// Pad baseView so the status bar is always at the bottom of the terminal
+	// Pad baseView so the bottom prompt bar (if active) and status bar sit flush at the bottom.
 	baseHeight := strings.Count(baseView, "\n") + 1
-	totalUsed := baseHeight + statusHeight
+	totalUsed := baseHeight + promptHeight + statusHeight
 	if totalUsed < m.Height {
 		missing := m.Height - totalUsed
 		if uiANSI.paintBg && m.Width > 0 {
@@ -1413,5 +1392,94 @@ func (m Model) View() string {
 		}
 	}
 
+	if hasPrompt {
+		return baseView + "\n" + m.renderPromptBar() + "\n" + status
+	}
+
 	return baseView + "\n" + status
+}
+
+func (m *Model) renderPromptBar() string {
+	width := m.Width
+	if width < 20 {
+		width = 20
+	}
+
+	p := activePalette
+	barBg := p.Surface
+
+	rule := withCanvasBg(lipgloss.NewStyle().Foreground(p.Border)).Render(strings.Repeat("─", width))
+
+	// Style a value copy of textInput so prompt, text, and placeholder blend cleanly into barBg.
+	ti := m.textInput
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(p.Accent).Background(barBg).Bold(true)
+	ti.TextStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(barBg)
+	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(p.MutedFg).Background(barBg)
+	ti.Cursor.TextStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(barBg)
+
+	var counter, hint string
+	switch {
+	case m.searching:
+		if len(m.searchResults) > 0 {
+			counter = fmt.Sprintf(" (%d/%d)", m.currentResultIndex+1, len(m.searchResults))
+		} else if m.searchQuery != "" {
+			counter = " (no results)"
+		}
+		hint = "Enter Next · Esc Close"
+	case m.replacing:
+		if len(m.replaceResults) > 0 {
+			counter = fmt.Sprintf(" (%d/%d)", m.currReplaceIndex+1, len(m.replaceResults))
+		} else if m.replaceQuery != "" && m.replaceStep >= 2 {
+			counter = " (no results)"
+		}
+		if m.replaceStep == 3 {
+			hint = "Enter Replace · Esc Done"
+		} else {
+			hint = "Enter Confirm · Esc Cancel"
+		}
+	case m.goToLine:
+		hint = "Enter Jump · Esc Cancel"
+	case m.saving:
+		hint = "Enter Save · Esc Cancel"
+	}
+
+	counterStyle := lipgloss.NewStyle().Foreground(p.AccentAlt).Background(barBg).Bold(true)
+	hintStyle := lipgloss.NewStyle().Foreground(p.MutedFg).Background(barBg)
+	spacerStyle := lipgloss.NewStyle().Background(barBg)
+
+	hintRendered := ""
+	hintW := 0
+	if width >= 50 && hint != "" {
+		hintRendered = hintStyle.Render(hint + " ")
+		hintW = lipgloss.Width(hintRendered)
+	}
+
+	counterRendered := ""
+	counterW := 0
+	if counter != "" {
+		counterRendered = counterStyle.Render(counter)
+		counterW = lipgloss.Width(counterRendered)
+	}
+
+	// Give textInput enough width while keeping everything on a single row.
+	promptW := lipgloss.Width(ti.Prompt)
+	maxInputW := width - promptW - counterW - hintW - 4
+	if maxInputW < 8 {
+		maxInputW = 8
+	}
+	ti.Width = maxInputW
+
+	left := spacerStyle.Render(" ") + ti.View() + counterRendered
+	leftW := lipgloss.Width(left)
+	gap := width - leftW - hintW
+	if gap < 0 {
+		gap = 0
+		hintRendered = ""
+	}
+
+	promptRow := lipgloss.NewStyle().Background(barBg).Width(width).Render(
+		left + spacerStyle.Render(strings.Repeat(" ", gap)) + hintRendered,
+	)
+
+	return rule + "\n" + promptRow
 }

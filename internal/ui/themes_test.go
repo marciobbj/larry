@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -239,5 +240,90 @@ func TestLightThemePaintsCanvasBackgroundInEditorAndTree(t *testing.T) {
 		if !strings.Contains(lines[i], wantBgSGR) {
 			t.Fatalf("row %d missing light canvas background (%s): %q", i, wantBgSGR, lines[i])
 		}
+		if w := lipgloss.Width(lines[i]); w != m.Width {
+			t.Fatalf("row %d width = %d, want full terminal width %d", i, w, m.Width)
+		}
+	}
+}
+
+func TestSearchPromptBarFitsHeightAndKeepsTopBarsVisible(t *testing.T) {
+	isolatePluginsDir(t)
+
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	cfg := config.DefaultConfig()
+	cfg.Theme = "tokyo-night-day"
+
+	lines := make([]string, 40)
+	for i := range lines {
+		lines[i] = "func exampleLine() { return }"
+	}
+	m := InitialModel("replace.go", lines, cfg)
+	defer m.ClosePlugins()
+	m.Width = 100
+	m.Height = 24
+	m.OpenDirectory(".")
+	m.fileTree.Focused = false
+
+	// Open Find (Ctrl+F)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m = updated.(Model)
+	if !m.searching {
+		t.Fatal("expected Ctrl+F to enter searching mode")
+	}
+
+	view := m.View()
+	renderedRows := strings.Split(view, "\n")
+	if len(renderedRows) != m.Height {
+		t.Fatalf("expected View() height %d with Find bar open, got %d", m.Height, len(renderedRows))
+	}
+	// Top row must still contain the tab bar ("replace.go") and never scroll off screen.
+	if !strings.Contains(stripANSI(renderedRows[0]), "replace.go") {
+		t.Fatalf("expected tab bar to stay visible on row 0, got %q", stripANSI(renderedRows[0]))
+	}
+	// Prompt row sits immediately above the status bar (which may wrap on narrow widths / long branch names).
+	statusRows := strings.Count(m.renderStatusBar(), "\n") + 1
+	promptRow := renderedRows[len(renderedRows)-1-statusRows]
+	if !strings.Contains(stripANSI(promptRow), "Search:") {
+		t.Fatalf("expected Search prompt on row %d, got %q", len(renderedRows)-1-statusRows, stripANSI(promptRow))
+	}
+	if !strings.Contains(promptRow, "48;2;207;208;215") {
+		t.Fatalf("expected themed Surface background on Search prompt row")
+	}
+}
+
+func TestTerminalBackgroundOSC11AndReset(t *testing.T) {
+	var buf bytes.Buffer
+	setTerminalBgWriterForTest(&buf)
+	defer setTerminalBgWriterForTest(nil)
+
+	SetTheme("tokyo-night-day")
+	if got := buf.String(); got != "\x1b]11;#e1e2e7\x07" {
+		t.Fatalf("expected OSC 11 for tokyo-night-day, got %q", got)
+	}
+
+	// Re-applying same theme should not emit duplicate OSC 11.
+	SetTheme("tokyo-night-day")
+	if got := buf.String(); got != "\x1b]11;#e1e2e7\x07" {
+		t.Fatalf("expected no duplicate OSC 11 write, got %q", got)
+	}
+
+	// Switching to another built-in scheme updates OSC 11.
+	SetTheme("catppuccin-latte")
+	if got := buf.String(); !strings.HasSuffix(got, "\x1b]11;#eff1f5\x07") {
+		t.Fatalf("expected updated OSC 11 for catppuccin-latte, got %q", got)
+	}
+
+	// Reset on exit emits OSC 111 once.
+	buf.Reset()
+	ResetTerminalBackground()
+	if got := buf.String(); got != "\x1b]111\x07" {
+		t.Fatalf("expected OSC 111 reset, got %q", got)
+	}
+	ResetTerminalBackground()
+	if got := buf.String(); got != "\x1b]111\x07" {
+		t.Fatalf("expected second reset to be a no-op, got %q", got)
 	}
 }

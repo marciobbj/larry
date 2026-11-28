@@ -92,6 +92,9 @@ func main() {
 	}
 
 	// Create and run the Bubble Tea program
+	ui.EnableTerminalBackgroundSync(os.Stdout)
+	defer ui.ResetTerminalBackground()
+
 	p := tea.NewProgram(m, tea.WithAltScreen()) // Use alternate screen for clean TUI
 
 	// Run the program and handle any errors

@@ -395,7 +395,7 @@ func (m Model) viewWithPluginPanel() string {
 	editorView := m.viewEditor(editorViewConfig{
 		width:          editorWidth,
 		height:         totalHeight,
-		showSearchUI:   m.searching,
+		showSearchUI:   false,
 		hideLeftBorder: m.sidebarWidth() > 0,
 	})
 

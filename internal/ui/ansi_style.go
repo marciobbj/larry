@@ -277,7 +277,7 @@ func joinSidebarAndMain(treeView, divider, mainView string, treeW, mainW, height
 		} else {
 			b.WriteString(uiANSI.canvasBg.wrap(" "))
 		}
-		if i < len(mainLines) {
+		if i < len(mainLines) && (mainLines[i] != "" || !uiANSI.paintBg) {
 			b.WriteString(mainLines[i])
 		} else if emptyMain != "" {
 			b.WriteString(emptyMain)
