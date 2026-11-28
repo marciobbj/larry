@@ -182,6 +182,16 @@ func (m *Model) viewEditor(cfg editorViewConfig) string {
 
 	lines := m.Lines
 	numDigits := lineNumberDigits(len(lines))
+	padTargetWidth := cfg.width
+	if !cfg.hideLeftBorder {
+		padTargetWidth--
+	}
+	if m.Config.LineNumbers {
+		padTargetWidth -= 1 + numDigits + 1
+	}
+	if padTargetWidth < textWidth {
+		padTargetWidth = textWidth
+	}
 	tabWidth := m.Config.TabWidth
 	if tabWidth < 1 {
 		tabWidth = 4
@@ -296,9 +306,9 @@ func (m *Model) viewEditor(cfg editorViewConfig) string {
 				drawn++
 			}
 
-			if uiANSI.paintBg && drawn < textWidth {
+			if uiANSI.paintBg && drawn < padTargetWidth {
 				s.WriteString(uiANSI.canvasBg.prefix)
-				for pad := textWidth - drawn; pad > 0; pad-- {
+				for pad := padTargetWidth - drawn; pad > 0; pad-- {
 					s.WriteByte(' ')
 				}
 				s.WriteString(uiANSI.canvasBg.suffix)
@@ -348,6 +358,16 @@ func (m *Model) viewEditorNoWrap(
 ) string {
 	lines := m.Lines
 	numDigits := lineNumberDigits(len(lines))
+	padTargetWidth := cfg.width
+	if !cfg.hideLeftBorder {
+		padTargetWidth--
+	}
+	if m.Config.LineNumbers {
+		padTargetWidth -= 1 + numDigits + 1
+	}
+	if padTargetWidth < textWidth {
+		padTargetWidth = textWidth
+	}
 	uiANSI := rs.uiANSI
 	blankNumSpaces := strings.Repeat(" ", numDigits+1)
 
@@ -493,9 +513,9 @@ func (m *Model) viewEditorNoWrap(
 			}
 		}
 
-		if uiANSI.paintBg && drawn < textWidth {
+		if uiANSI.paintBg && drawn < padTargetWidth {
 			s.WriteString(uiANSI.canvasBg.prefix)
-			for pad := textWidth - drawn; pad > 0; pad-- {
+			for pad := padTargetWidth - drawn; pad > 0; pad-- {
 				s.WriteByte(' ')
 			}
 			s.WriteString(uiANSI.canvasBg.suffix)
@@ -503,7 +523,7 @@ func (m *Model) viewEditorNoWrap(
 
 		s.WriteString(uiANSI.eolClear)
 		rendered++
-		if rendered < maxVisualLines {
+		if lineNum+1 < len(lines) && rendered < maxVisualLines {
 			s.WriteByte('\n')
 		}
 	}

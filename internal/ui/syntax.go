@@ -344,6 +344,7 @@ func SetTheme(themeName string) {
 				omarchySignature = OmarchyThemeSignature(path)
 				clearSyntaxCache()
 				initStyles()
+				SyncTerminalBackground()
 				return
 			}
 		}
@@ -366,6 +367,7 @@ func SetTheme(themeName string) {
 			paintCanvasBg = true
 			clearSyntaxCache()
 			initStyles()
+			SyncTerminalBackground()
 			return
 		}
 	}
@@ -380,6 +382,7 @@ func SetTheme(themeName string) {
 	theme = t
 	clearSyntaxCache()
 	initStyles()
+	SyncTerminalBackground()
 }
 
 func resolveLexer(filename string, sampleContent string) chroma.Lexer {

@@ -260,6 +260,8 @@ func (tp *ThemePickerModal) Render(totalW, totalH int) string {
 	tp.Input.PromptStyle = lipgloss.NewStyle().Foreground(pal.AccentAlt).Background(bg).Bold(true)
 	tp.Input.TextStyle = lipgloss.NewStyle().Foreground(pal.Foreground).Background(bg)
 	tp.Input.PlaceholderStyle = lipgloss.NewStyle().Foreground(pal.MutedFg).Background(bg)
+	tp.Input.Cursor.Style = lipgloss.NewStyle().Foreground(pal.AccentFg).Background(pal.Accent)
+	tp.Input.Cursor.TextStyle = lipgloss.NewStyle().Foreground(pal.Foreground).Background(bg)
 
 	// ── Header row ──
 	leftHeader := badgeStyle.Render("LARRY") + bgFill.Render(" ") + titleStyle.Render("Colorschemes")

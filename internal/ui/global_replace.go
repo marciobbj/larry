@@ -364,6 +364,7 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 
 	p := activePalette
 	bg := modalStyle.GetBackground()
+	inputBg := p.Surface
 
 	badgeActiveBg := p.Accent
 	badgeInactiveBg := p.Surface
@@ -377,6 +378,16 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 	confirmFg := p.Yellow
 	fileFg := p.Cyan
 
+	bgFill := lipgloss.NewStyle().Background(bg)
+	inputFill := lipgloss.NewStyle().Background(inputBg)
+	padBg := func(s string) string {
+		if w := lipgloss.Width(s); w < innerWidth {
+			return s + bgFill.Render(strings.Repeat(" ", innerWidth-w))
+		}
+		return s
+	}
+	emptyRow := bgFill.Render(strings.Repeat(" ", innerWidth))
+
 	findBadgeStyle := lipgloss.NewStyle().Background(badgeInactiveBg).Foreground(badgeInactiveFg).Bold(true).Width(9).Align(lipgloss.Center)
 	repBadgeStyle := lipgloss.NewStyle().Background(badgeInactiveBg).Foreground(badgeInactiveFg).Bold(true).Width(9).Align(lipgloss.Center)
 	if m.focus == grFocusFind {
@@ -386,17 +397,37 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 	}
 
 	mutedStyle := lipgloss.NewStyle().Foreground(mutedFg).Background(bg)
+	ruleStyle := lipgloss.NewStyle().Foreground(p.Border).Background(bg)
 	fileStyle := lipgloss.NewStyle().Foreground(fileFg).Background(bg).Bold(true)
 	oldStyle := lipgloss.NewStyle().Foreground(oldMatchFg).Background(bg)
 	newStyle := lipgloss.NewStyle().Foreground(newMatchFg).Background(bg)
 	confirmStyle := lipgloss.NewStyle().Foreground(confirmFg).Background(bg).Bold(true)
 
-	inputW := innerWidth - 14
-	if inputW < 10 {
-		inputW = 10
+	renderInputRow := func(badge string, ti textinput.Model, focused bool) string {
+		promptFg := p.MutedFg
+		if focused {
+			promptFg = p.Accent
+		}
+		promptRendered := lipgloss.NewStyle().Foreground(promptFg).Background(inputBg).Bold(true).Render(" » ")
+		usedPrefix := lipgloss.Width(badge) + lipgloss.Width(promptRendered)
+		avail := innerWidth - usedPrefix - 1
+		if avail < 8 {
+			avail = 8
+		}
+		ti.Prompt = ""
+		ti.Width = avail
+		ti.TextStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(inputBg)
+		ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(p.MutedFg).Background(inputBg)
+		ti.Cursor.Style = lipgloss.NewStyle().Foreground(p.AccentFg).Background(p.Accent)
+		ti.Cursor.TextStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(inputBg)
+
+		inputView := ti.View()
+		row := badge + promptRendered + inputView
+		if rw := lipgloss.Width(row); rw < innerWidth {
+			row += inputFill.Render(strings.Repeat(" ", innerWidth-rw))
+		}
+		return row
 	}
-	m.findInput.Width = inputW
-	m.replaceInput.Width = inputW
 
 	rootName := filepath.Base(m.root)
 	if rootName == "" || rootName == "." {
@@ -405,10 +436,10 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 
 	var lines []string
 
-	// Input rows
-	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Center, findBadgeStyle.Render("FIND"), m.findInput.View()))
-	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Center, repBadgeStyle.Render("REPLACE"), m.replaceInput.View()))
-	lines = append(lines, "")
+	// Input rows (full-width elevated input bar with theme-aware cursor & placeholder)
+	lines = append(lines, renderInputRow(findBadgeStyle.Render("FIND"), m.findInput, m.focus == grFocusFind))
+	lines = append(lines, renderInputRow(repBadgeStyle.Render("REPLACE"), m.replaceInput, m.focus == grFocusReplace))
+	lines = append(lines, emptyRow)
 
 	// Summary line
 	totalFiles, totalMatches := m.TotalCounts()
@@ -416,21 +447,21 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 	var summary string
 	switch {
 	case m.errMsg != "":
-		summary = oldStyle.Render("Error: " + m.errMsg)
+		summary = oldStyle.Render(truncateDisplay("Error: "+m.errMsg, innerWidth))
 	case m.findInput.Value() == "":
-		summary = mutedStyle.Render(fmt.Sprintf("Scope: %s/  ·  Type to search across project", rootName))
+		summary = mutedStyle.Render(truncateDisplay(fmt.Sprintf("Scope: %s/  ·  Type to search across project", rootName), innerWidth))
 	case m.loading:
 		summary = mutedStyle.Render("Searching project files...")
 	case totalFiles == 0:
 		summary = mutedStyle.Render("No matches found in project.")
 	default:
-		summary = mutedStyle.Render(fmt.Sprintf(
+		summary = mutedStyle.Render(truncateDisplay(fmt.Sprintf(
 			"Scope: %s/  ·  %d matches in %d files (%d/%d selected · %d to replace)",
 			rootName, totalMatches, totalFiles, selFiles, totalFiles, selMatches,
-		))
+		), innerWidth))
 	}
-	lines = append(lines, summary)
-	lines = append(lines, mutedStyle.Render(strings.Repeat("─", innerWidth)))
+	lines = append(lines, padBg(summary))
+	lines = append(lines, ruleStyle.Render(strings.Repeat("─", innerWidth)))
 
 	// Results list
 	maxVis := m.maxVisibleGroups()
@@ -462,7 +493,7 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 				rowStyle := lipgloss.NewStyle().Foreground(highlightFg).Background(highlightBg).Bold(true)
 				lines = append(lines, rowStyle.Width(innerWidth).Render(headerText))
 			} else {
-				lines = append(lines, fileStyle.Render(headerText))
+				lines = append(lines, padBg(fileStyle.Render(headerText)))
 			}
 			renderedRows++
 
@@ -477,9 +508,9 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 
 				if query != "" && query != replacement {
 					previewLine := renderDiffLine(first.Content, query, replacement, avail, oldStyle, newStyle, mutedStyle)
-					lines = append(lines, mutedStyle.Render(prefix)+previewLine)
+					lines = append(lines, padBg(mutedStyle.Render(prefix)+previewLine))
 				} else {
-					lines = append(lines, mutedStyle.Render(prefix+truncateDisplay(first.Content, avail)))
+					lines = append(lines, padBg(mutedStyle.Render(prefix+truncateDisplay(first.Content, avail))))
 				}
 				renderedRows++
 			}
@@ -488,21 +519,21 @@ func (m GlobalReplaceModel) View(innerWidth int) string {
 
 	targetListRows := maxVis * 2
 	for renderedRows < targetListRows {
-		lines = append(lines, "")
+		lines = append(lines, emptyRow)
 		renderedRows++
 	}
 
 	// Footer / confirmation bar
-	lines = append(lines, mutedStyle.Render(strings.Repeat("─", innerWidth)))
+	lines = append(lines, ruleStyle.Render(strings.Repeat("─", innerWidth)))
 	if m.confirming {
-		lines = append(lines, confirmStyle.Render(fmt.Sprintf(
+		lines = append(lines, padBg(confirmStyle.Render(truncateDisplay(fmt.Sprintf(
 			"Replace %d occurrences in %d files?  [Enter/y] Confirm  ·  [Esc/n] Cancel",
 			selMatches, selFiles,
-		)))
+		), innerWidth))))
 	} else if m.focus == grFocusList {
-		lines = append(lines, mutedStyle.Render("↑/↓ Navigate · Space Toggle File · a Toggle All · Enter Replace · Tab Fields · Esc Close"))
+		lines = append(lines, padBg(mutedStyle.Render(truncateDisplay("↑/↓ Navigate · Space Toggle File · a Toggle All · Enter Replace · Tab Fields · Esc Close", innerWidth))))
 	} else {
-		lines = append(lines, mutedStyle.Render("Tab Switch Field/List · ↑/↓ Preview · Ctrl+A Toggle All · Enter Continue/Replace · Esc Close"))
+		lines = append(lines, padBg(mutedStyle.Render(truncateDisplay("Tab Switch Field/List · ↑/↓ Preview · Ctrl+A Toggle All · Enter Continue/Replace · Esc Close", innerWidth))))
 	}
 
 	return strings.Join(lines, "\n")

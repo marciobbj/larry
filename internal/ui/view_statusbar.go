@@ -341,17 +341,13 @@ func (m *Model) renderStatusBarUncached(width int) string {
 }
 
 func (m Model) statusBarHeight() int {
-	// Fast path: on normal-width terminals where the filename & status text fit
-	// comfortably on a single row, skip rendering the full status bar just to
-	// measure its height.
-	if m.Width >= 90 && len(m.FileName) < m.Width/3 && len(m.statusMsg) < m.Width/2 {
+	// renderStatusBar is memoized in statusCache, so computing exact height
+	// (including wrapped status bars on long branch/file names) is O(1).
+	h := strings.Count(m.renderStatusBar(), "\n") + 1
+	if h < 1 {
 		return 1
 	}
-	height := lipgloss.Height(m.renderStatusBar())
-	if height < 1 {
-		return 1
-	}
-	return height
+	return h
 }
 
 func (m Model) editorViewportHeight() int {
