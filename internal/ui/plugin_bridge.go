@@ -322,6 +322,39 @@ func (a *modelEditorAPI) CloseHover() {
 	a.m.pluginHover.Visible = false
 }
 
+func (a *modelEditorAPI) ShowCompletions(items []plugin.CompletionItem, startRow, startCol int, onSelect func(plugin.CompletionItem)) {
+	if len(items) == 0 {
+		a.m.completion.Close()
+		return
+	}
+	if startRow < 0 {
+		startRow = a.m.CursorRow
+	}
+	if startRow < 0 || startRow >= len(a.m.Lines) {
+		a.m.completion.Close()
+		return
+	}
+	if startCol < 0 {
+		startCol = findIdentPrefixStartCol(a.m.Lines[startRow], a.m.CursorCol)
+	}
+	prefix := ""
+	if a.m.CursorRow == startRow && a.m.CursorCol >= startCol {
+		runes := []rune(a.m.Lines[startRow])
+		end := a.m.CursorCol
+		if end > len(runes) {
+			end = len(runes)
+		}
+		if startCol <= end {
+			prefix = string(runes[startCol:end])
+		}
+	}
+	a.m.completion.Open(items, startRow, startCol, prefix, onSelect)
+}
+
+func (a *modelEditorAPI) CloseCompletions() {
+	a.m.completion.Close()
+}
+
 func (a *modelEditorAPI) ThemeName() string {
 	return a.m.Config.Theme
 }

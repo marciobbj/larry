@@ -314,7 +314,7 @@ end)
 - **Lifecycle & Config**: `larry.plugin(meta)`, `larry.config(name?)`, `larry.log(msg)`, `larry.on(event, fn)` (`init`, `file_open`, `buffer_change`, `before_save`, `after_save`, `tab_switch`, `cursor_move`, `theme_change`, `quit`)
 - **Buffer & Cursor (1-based)**: `larry.buf.{text, set_text, lines, set_lines, line, set_line, line_count, insert, delete_range, filename, filepath, filetype, modified, save}`, `larry.cursor.{get, set, selection, selected_text}`, `larry.workspace.{root, open}`
 - **Commands & Keymaps**: `larry.cmd.{register, run}`, `larry.keymap.{set, del}` *(supports `<leader>+...`)*
-- **UI & Diagnostics**: `larry.ui.{set_status, set_badge, clear_badge, show_picker, show_hover, close_hover, show_panel, close_panel, theme, palette}`, `larry.diagnostics.{set, clear, get}`, `larry.gutter.{set, clear}`, `larry.highlights.{set, clear}`
+- **UI & Diagnostics**: `larry.ui.{set_status, set_badge, clear_badge, show_picker, show_hover, close_hover, show_panel, close_panel, show_completions, close_completions, theme, palette}`, `larry.diagnostics.{set, clear, get}`, `larry.gutter.{set, clear}`, `larry.highlights.{set, clear}`
 - **External Tools & LSP**: `larry.exec.{has, sync, async}`, `larry.lsp.{start, clients, stop_all, path_to_uri, uri_to_path}` (`client:request`, `client:notify`, `client:on_notification`, `client:on_exit`, `client:stop`), `larry.timer.{after, cancel}`, `larry.json.{encode, decode}`, `larry.fs.{exists, read, join, dirname, basename}`
 
 ## Roadmap

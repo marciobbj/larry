@@ -96,6 +96,7 @@ type Model struct {
 	picker             PickerModal
 	themePickerActive  bool
 	themePicker        ThemePickerModal
+	completion         CompletionPopup
 	pluginHover        HoverState
 	pluginPanel        PanelState
 	bufferChangeSeq    int
@@ -1174,7 +1175,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 
 		if m.fileTree.Visible && m.fileTree.Focused {
+			m.completion.Close()
 			return m.handleFileTreeKey(msg)
+		}
+
+		// Floating cursor-anchored completion popup intercepts navigation/accept/dismiss
+		// while letting identifier edits pass through for live prefix filtering.
+		keepCompletion := false
+		if m.completion.Visible {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.completion.Close()
+				return m, nil
+			case tea.KeyUp:
+				m.completion.MoveUp()
+				return m, nil
+			case tea.KeyDown:
+				m.completion.MoveDown()
+				return m, nil
+			case tea.KeyPgUp:
+				for i := 0; i < 5; i++ {
+					m.completion.MoveUp()
+				}
+				return m, nil
+			case tea.KeyPgDown:
+				for i := 0; i < 5; i++ {
+					m.completion.MoveDown()
+				}
+				return m, nil
+			case tea.KeyTab, tea.KeyEnter:
+				prevVer := m.visualLineVersion
+				m = m.acceptCompletion()
+				if m.plugins != nil && !m.Quitting && m.visualLineVersion != prevVer {
+					m.bufferChangeSeq++
+					return m, bufferChangeDebounceCmd(m.bufferChangeSeq)
+				}
+				return m, nil
+			case tea.KeyBackspace:
+				keepCompletion = true
+			case tea.KeyRunes:
+				if !msg.Alt && len(msg.Runes) > 0 {
+					allIdent := true
+					for _, r := range msg.Runes {
+						if !isIdentRune(r) {
+							allIdent = false
+							break
+						}
+					}
+					keepCompletion = allIdent
+				}
+			}
+			if !keepCompletion {
+				m.completion.Close()
+			}
 		}
 
 		// Dismiss the welcome screen on editor key presses (keep it alongside the sidebar until a file is opened or edited)
@@ -1195,6 +1248,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		var cmd tea.Cmd
 		m, cmd = m.handleKey(msg)
+
+		if keepCompletion {
+			m.syncCompletionPrefix()
+		}
 
 		var extraCmds []tea.Cmd
 		if cmd != nil {
@@ -1397,6 +1454,10 @@ func (m Model) View() string {
 		} else {
 			baseView += strings.Repeat("\n", missing)
 		}
+	}
+
+	if m.completion.Visible && !m.showWelcome {
+		baseView = m.overlayCompletionPopup(baseView, wsHeight, uiANSI)
 	}
 
 	if hasPrompt {

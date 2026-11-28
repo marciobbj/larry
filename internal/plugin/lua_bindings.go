@@ -468,6 +468,97 @@ func (m *Manager) registerUIModule(L *lua.LState, larryTbl *lua.LTable) {
 		return 0
 	}))
 
+	// larry.ui.show_completions(items, opts?, on_select?)
+	// Also accepts 2-arg form: larry.ui.show_completions(items, on_select)
+	L.SetField(uiTbl, "show_completions", L.NewFunction(func(L *lua.LState) int {
+		if m.activeAPI == nil {
+			return 0
+		}
+		itemsTbl := L.CheckTable(1)
+		startRow := -1
+		startCol := -1
+		var onSelectFn *lua.LFunction
+
+		if L.GetTop() >= 2 && L.Get(2) != lua.LNil {
+			switch v := L.Get(2).(type) {
+			case *lua.LFunction:
+				onSelectFn = v
+			case *lua.LTable:
+				if line := getTableInt(v, "line", 0); line > 0 {
+					startRow = line - 1
+				}
+				if col := getTableInt(v, "start_col", 0); col > 0 {
+					startCol = col - 1
+				}
+			}
+		}
+		if L.GetTop() >= 3 && L.Get(3) != lua.LNil {
+			onSelectFn = L.CheckFunction(3)
+		}
+
+		items := make([]CompletionItem, 0, itemsTbl.Len())
+		for i := 1; i <= itemsTbl.Len(); i++ {
+			v := itemsTbl.RawGetInt(i)
+			switch elem := v.(type) {
+			case lua.LString:
+				s := string(elem)
+				if s != "" {
+					items = append(items, CompletionItem{Label: s, InsertText: s})
+				}
+			case *lua.LTable:
+				label := getTableString(elem, "label")
+				insertText := getTableString(elem, "insert_text")
+				if insertText == "" {
+					insertText = getTableString(elem, "id")
+				}
+				if label == "" {
+					label = insertText
+				}
+				if insertText == "" {
+					insertText = label
+				}
+				if label == "" {
+					continue
+				}
+				items = append(items, CompletionItem{
+					Label:      label,
+					InsertText: insertText,
+					Kind:       getTableString(elem, "kind"),
+					Detail:     getTableString(elem, "detail"),
+					Doc:        getTableString(elem, "doc"),
+				})
+			}
+		}
+
+		var cb func(CompletionItem)
+		if onSelectFn != nil {
+			cb = func(chosen CompletionItem) {
+				if m.L == nil {
+					return
+				}
+				tbl := m.L.NewTable()
+				tbl.RawSetString("label", lua.LString(chosen.Label))
+				tbl.RawSetString("insert_text", lua.LString(chosen.InsertText))
+				tbl.RawSetString("kind", lua.LString(chosen.Kind))
+				tbl.RawSetString("detail", lua.LString(chosen.Detail))
+				tbl.RawSetString("doc", lua.LString(chosen.Doc))
+				if err := m.callLuaFn(onSelectFn, tbl); err != nil {
+					m.addLog(fmt.Sprintf("[completions] callback error: %v", err))
+				}
+			}
+		}
+
+		m.activeAPI.ShowCompletions(items, startRow, startCol, cb)
+		return 0
+	}))
+
+	L.SetField(uiTbl, "close_completions", L.NewFunction(func(L *lua.LState) int {
+		if m.activeAPI != nil {
+			m.activeAPI.CloseCompletions()
+		}
+		return 0
+	}))
+
 	L.SetField(uiTbl, "theme", L.NewFunction(func(L *lua.LState) int {
 		if m.activeAPI == nil {
 			L.Push(lua.LString(m.cfg.Theme))

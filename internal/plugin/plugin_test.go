@@ -165,6 +165,9 @@ func (a *mockEditorAPI) ShowHover(title string, lines []string) {
 	a.hoverVisible = true
 }
 func (a *mockEditorAPI) CloseHover() { a.hoverVisible = false }
+func (a *mockEditorAPI) ShowCompletions(items []CompletionItem, startRow, startCol int, onSelect func(CompletionItem)) {
+}
+func (a *mockEditorAPI) CloseCompletions() {}
 
 func TestDiscoveryAndConfig(t *testing.T) {
 	dir := t.TempDir()
