@@ -45,6 +45,7 @@ type Manager struct {
 
 	cfg        config.Config
 	pluginsDir string
+	leaderKey  string
 
 	L             *lua.LState
 	activeAPI     EditorAPI
@@ -65,12 +66,21 @@ type Manager struct {
 	// badge ID -> StatusBadge
 	badges map[string]StatusBadge
 
+	// Pre-computed immutable read caches (rebuilt only on write) for O(1) zero-alloc View() reads.
+	cachedDiags       map[string][]Diagnostic
+	cachedDiagsByLine map[string]map[int][]Diagnostic
+	cachedDiagCounts  map[string][2]int
+	cachedGutterSigns map[string]map[int]GutterSign
+	cachedHighlights  map[string]map[int][]TextHighlight
+	cachedBadges      []StatusBadge
+
 	lspClients map[string]*LSPClient
 	timers     map[int64]*time.Timer
 	logs       []string
 
 	nextHandlerID int
 	nextTimerID   atomic.Int64
+	uiVersion     atomic.Int64
 
 	asyncCh chan AsyncEvent
 	closed  atomic.Bool
@@ -78,19 +88,29 @@ type Manager struct {
 
 // NewManager creates an initialized plugin manager ready to load plugins from dir.
 func NewManager(cfg config.Config, pluginsDir string) *Manager {
+	leader := strings.ToLower(strings.TrimSpace(cfg.LeaderKey))
+	if leader == "" {
+		leader = "ctrl"
+	}
 	m := &Manager{
-		cfg:         cfg,
-		pluginsDir:  pluginsDir,
-		hooks:       make(map[EventName][]eventHandler),
-		commands:    make(map[string]*registeredCommand),
-		keymaps:     make(map[string]*registeredKeymap),
-		diagnostics: make(map[string]map[string][]Diagnostic),
-		gutterSigns: make(map[string]map[string]map[int]GutterSign),
-		highlights:  make(map[string]map[string]map[int][]TextHighlight),
-		badges:      make(map[string]StatusBadge),
-		lspClients:  make(map[string]*LSPClient),
-		timers:      make(map[int64]*time.Timer),
-		asyncCh:     make(chan AsyncEvent, 256),
+		cfg:               cfg,
+		pluginsDir:        pluginsDir,
+		leaderKey:         leader,
+		hooks:             make(map[EventName][]eventHandler),
+		commands:          make(map[string]*registeredCommand),
+		keymaps:           make(map[string]*registeredKeymap),
+		diagnostics:       make(map[string]map[string][]Diagnostic),
+		gutterSigns:       make(map[string]map[string]map[int]GutterSign),
+		highlights:        make(map[string]map[string]map[int][]TextHighlight),
+		badges:            make(map[string]StatusBadge),
+		cachedDiags:       make(map[string][]Diagnostic),
+		cachedDiagsByLine: make(map[string]map[int][]Diagnostic),
+		cachedDiagCounts:  make(map[string][2]int),
+		cachedGutterSigns: make(map[string]map[int]GutterSign),
+		cachedHighlights:  make(map[string]map[int][]TextHighlight),
+		lspClients:        make(map[string]*LSPClient),
+		timers:            make(map[int64]*time.Timer),
+		asyncCh:           make(chan AsyncEvent, 256),
 	}
 	m.initVM()
 	return m
@@ -104,6 +124,14 @@ func (m *Manager) initVM() {
 	m.registerBindings(L)
 }
 
+// UIVersion returns a monotonic counter incremented whenever diagnostics,
+// gutter signs, highlights, or status badges change.
+func (m *Manager) UIVersion() int64 {
+	if m == nil {
+		return 0
+	}
+	return m.uiVersion.Load()
+}
 // AsyncEvents returns the channel on which background work delivers UI-thread callbacks.
 func (m *Manager) AsyncEvents() <-chan AsyncEvent {
 	return m.asyncCh
@@ -337,6 +365,13 @@ func (m *Manager) Reload(api EditorAPI) []PluginInfo {
 	m.gutterSigns = make(map[string]map[string]map[int]GutterSign)
 	m.highlights = make(map[string]map[string]map[int][]TextHighlight)
 	m.badges = make(map[string]StatusBadge)
+	m.cachedDiags = make(map[string][]Diagnostic)
+	m.cachedDiagsByLine = make(map[string]map[int][]Diagnostic)
+	m.cachedDiagCounts = make(map[string][2]int)
+	m.cachedGutterSigns = make(map[string]map[int]GutterSign)
+	m.cachedHighlights = make(map[string]map[int][]TextHighlight)
+	m.cachedBadges = nil
+	m.uiVersion.Add(1)
 	m.lspClients = make(map[string]*LSPClient)
 	m.timers = make(map[int64]*time.Timer)
 	m.initVM()
@@ -439,15 +474,29 @@ func (m *Manager) buildEventContext(api EditorAPI, event EventName, extra map[st
 	return tbl
 }
 
+// HasHandlers reports whether any plugin has subscribed to event.
+func (m *Manager) HasHandlers(event EventName) bool {
+	if m == nil || m.closed.Load() {
+		return false
+	}
+	m.mu.RLock()
+	n := len(m.hooks[event])
+	m.mu.RUnlock()
+	return n > 0
+}
+
 // HandleKey dispatches a key string against plugin-registered keymaps.
 // Returns true if a plugin keymap handled the key.
 func (m *Manager) HandleKey(api EditorAPI, keyStr string) bool {
 	if m == nil || m.closed.Load() || m.L == nil {
 		return false
 	}
-	norm := m.normalizeKey(keyStr)
-
 	m.mu.RLock()
+	if len(m.keymaps) == 0 {
+		m.mu.RUnlock()
+		return false
+	}
+	norm := m.normalizeKey(keyStr)
 	km, ok := m.keymaps[norm]
 	m.mu.RUnlock()
 	if !ok {
@@ -511,12 +560,14 @@ func (m *Manager) callLuaFn(fn *lua.LFunction, args ...lua.LValue) error {
 
 func (m *Manager) normalizeKey(raw string) string {
 	k := strings.ToLower(strings.TrimSpace(raw))
-	leader := strings.ToLower(strings.TrimSpace(m.cfg.LeaderKey))
-	if leader == "" {
-		leader = "ctrl"
+	if strings.Contains(k, "leader") {
+		leader := m.leaderKey
+		if leader == "" {
+			leader = "ctrl"
+		}
+		k = strings.ReplaceAll(k, "<leader>", leader)
+		k = strings.ReplaceAll(k, "leader+", leader+"+")
 	}
-	k = strings.ReplaceAll(k, "<leader>", leader)
-	k = strings.ReplaceAll(k, "leader+", leader+"+")
 	return k
 }
 
@@ -603,10 +654,141 @@ func normalizePathKey(p string) string {
 	if p == "" {
 		return ""
 	}
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
 	if abs, err := filepath.Abs(p); err == nil {
 		return filepath.Clean(abs)
 	}
 	return filepath.Clean(p)
+}
+
+func (m *Manager) rebuildDiagCachesLocked(key string) {
+	byNS := m.diagnostics[key]
+	if len(byNS) == 0 {
+		delete(m.cachedDiags, key)
+		delete(m.cachedDiagsByLine, key)
+		delete(m.cachedDiagCounts, key)
+		m.uiVersion.Add(1)
+		m.rebuildGutterCacheLocked(key)
+		return
+	}
+	var all []Diagnostic
+	for _, list := range byNS {
+		all = append(all, list...)
+	}
+	if len(all) == 0 {
+		delete(m.cachedDiags, key)
+		delete(m.cachedDiagsByLine, key)
+		delete(m.cachedDiagCounts, key)
+		m.rebuildGutterCacheLocked(key)
+		return
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Line != all[j].Line {
+			return all[i].Line < all[j].Line
+		}
+		if all[i].Severity != all[j].Severity {
+			return all[i].Severity < all[j].Severity
+		}
+		return all[i].Col < all[j].Col
+	})
+	byLine := make(map[int][]Diagnostic, len(all))
+	var errs, warns int
+	for _, d := range all {
+		byLine[d.Line] = append(byLine[d.Line], d)
+		switch d.Severity {
+		case SeverityError:
+			errs++
+		case SeverityWarning:
+			warns++
+		}
+	}
+	m.cachedDiags[key] = all
+	m.cachedDiagsByLine[key] = byLine
+	m.cachedDiagCounts[key] = [2]int{errs, warns}
+	m.uiVersion.Add(1)
+	m.rebuildGutterCacheLocked(key)
+}
+
+func (m *Manager) rebuildGutterCacheLocked(key string) {
+	diagsByNS := m.diagnostics[key]
+	signsByNS := m.gutterSigns[key]
+	if len(diagsByNS) == 0 && len(signsByNS) == 0 {
+		delete(m.cachedGutterSigns, key)
+		return
+	}
+	result := make(map[int]GutterSign)
+	for _, list := range diagsByNS {
+		for _, d := range list {
+			sign := diagnosticGutterSign(d)
+			if existing, ok := result[d.Line]; !ok || sign.Priority > existing.Priority {
+				result[d.Line] = sign
+			}
+		}
+	}
+	for _, byLine := range signsByNS {
+		for line, sign := range byLine {
+			if existing, ok := result[line]; !ok || sign.Priority >= existing.Priority {
+				result[line] = sign
+			}
+		}
+	}
+	if len(result) == 0 {
+		delete(m.cachedGutterSigns, key)
+	} else {
+		m.cachedGutterSigns[key] = result
+	}
+}
+
+func (m *Manager) rebuildHighlightsCacheLocked(key string) {
+	byNS := m.highlights[key]
+	if len(byNS) == 0 {
+		delete(m.cachedHighlights, key)
+		return
+	}
+	merged := make(map[int][]TextHighlight)
+	for _, perLine := range byNS {
+		for row, list := range perLine {
+			merged[row] = append(merged[row], list...)
+		}
+	}
+	if len(merged) == 0 {
+		delete(m.cachedHighlights, key)
+		return
+	}
+	for row := range merged {
+		list := merged[row]
+		if len(list) > 1 {
+			sort.Slice(list, func(i, j int) bool {
+				if list[i].Priority != list[j].Priority {
+					return list[i].Priority < list[j].Priority
+				}
+				return list[i].Col < list[j].Col
+			})
+		}
+	}
+	m.cachedHighlights[key] = merged
+}
+
+func (m *Manager) rebuildBadgesCacheLocked() {
+	if len(m.badges) == 0 {
+		m.cachedBadges = nil
+		m.uiVersion.Add(1)
+		return
+	}
+	out := make([]StatusBadge, 0, len(m.badges))
+	for _, b := range m.badges {
+		out = append(out, b)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Priority != out[j].Priority {
+			return out[i].Priority > out[j].Priority
+		}
+		return out[i].ID < out[j].ID
+	})
+	m.cachedBadges = out
+	m.uiVersion.Add(1)
 }
 
 func (m *Manager) SetDiagnostics(path, namespace string, diags []Diagnostic) {
@@ -625,6 +807,7 @@ func (m *Manager) SetDiagnostics(path, namespace string, diags []Diagnostic) {
 	copied := make([]Diagnostic, len(diags))
 	copy(copied, diags)
 	m.diagnostics[key][namespace] = copied
+	m.rebuildDiagCachesLocked(key)
 }
 
 func (m *Manager) ClearDiagnostics(path, namespace string) {
@@ -633,20 +816,30 @@ func (m *Manager) ClearDiagnostics(path, namespace string) {
 	if path == "" {
 		if namespace == "" {
 			m.diagnostics = make(map[string]map[string][]Diagnostic)
+			m.cachedDiags = make(map[string][]Diagnostic)
+			m.cachedDiagsByLine = make(map[string]map[int][]Diagnostic)
+			m.cachedDiagCounts = make(map[string][2]int)
+			m.uiVersion.Add(1)
+			for key := range m.cachedGutterSigns {
+				m.rebuildGutterCacheLocked(key)
+			}
 			return
 		}
-		for _, byNS := range m.diagnostics {
+		for key, byNS := range m.diagnostics {
 			delete(byNS, namespace)
+			m.rebuildDiagCachesLocked(key)
 		}
 		return
 	}
 	key := normalizePathKey(path)
 	if namespace == "" {
 		delete(m.diagnostics, key)
+		m.rebuildDiagCachesLocked(key)
 		return
 	}
 	if byNS, ok := m.diagnostics[key]; ok {
 		delete(byNS, namespace)
+		m.rebuildDiagCachesLocked(key)
 	}
 }
 
@@ -657,48 +850,28 @@ func (m *Manager) Diagnostics(path string) []Diagnostic {
 	key := normalizePathKey(path)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	byNS := m.diagnostics[key]
-	if len(byNS) == 0 {
-		return nil
-	}
-	var all []Diagnostic
-	for _, list := range byNS {
-		all = append(all, list...)
-	}
-	sort.Slice(all, func(i, j int) bool {
-		if all[i].Line != all[j].Line {
-			return all[i].Line < all[j].Line
-		}
-		if all[i].Severity != all[j].Severity {
-			return all[i].Severity < all[j].Severity
-		}
-		return all[i].Col < all[j].Col
-	})
-	return all
+	return m.cachedDiags[key]
 }
 
 func (m *Manager) DiagnosticsByLine(path string) map[int][]Diagnostic {
-	diags := m.Diagnostics(path)
-	if len(diags) == 0 {
+	if m == nil || path == "" {
 		return nil
 	}
-	byLine := make(map[int][]Diagnostic)
-	for _, d := range diags {
-		byLine[d.Line] = append(byLine[d.Line], d)
-	}
-	return byLine
+	key := normalizePathKey(path)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cachedDiagsByLine[key]
 }
 
 func (m *Manager) DiagnosticCounts(path string) (errs, warns int) {
-	for _, d := range m.Diagnostics(path) {
-		switch d.Severity {
-		case SeverityError:
-			errs++
-		case SeverityWarning:
-			warns++
-		}
+	if m == nil || path == "" {
+		return 0, 0
 	}
-	return errs, warns
+	key := normalizePathKey(path)
+	m.mu.RLock()
+	c := m.cachedDiagCounts[key]
+	m.mu.RUnlock()
+	return c[0], c[1]
 }
 
 func (m *Manager) SetGutterSigns(path, namespace string, signs []GutterSign) {
@@ -719,6 +892,7 @@ func (m *Manager) SetGutterSigns(path, namespace string, signs []GutterSign) {
 		byLine[s.Line] = s
 	}
 	m.gutterSigns[key][namespace] = byLine
+	m.rebuildGutterCacheLocked(key)
 }
 
 func (m *Manager) ClearGutterSigns(path, namespace string) {
@@ -727,20 +901,26 @@ func (m *Manager) ClearGutterSigns(path, namespace string) {
 	if path == "" {
 		if namespace == "" {
 			m.gutterSigns = make(map[string]map[string]map[int]GutterSign)
+			for key := range m.cachedGutterSigns {
+				m.rebuildGutterCacheLocked(key)
+			}
 			return
 		}
-		for _, byNS := range m.gutterSigns {
+		for key, byNS := range m.gutterSigns {
 			delete(byNS, namespace)
+			m.rebuildGutterCacheLocked(key)
 		}
 		return
 	}
 	key := normalizePathKey(path)
 	if namespace == "" {
 		delete(m.gutterSigns, key)
+		m.rebuildGutterCacheLocked(key)
 		return
 	}
 	if byNS, ok := m.gutterSigns[key]; ok {
 		delete(byNS, namespace)
+		m.rebuildGutterCacheLocked(key)
 	}
 }
 
@@ -766,6 +946,7 @@ func (m *Manager) SetHighlights(path, namespace string, spans []TextHighlight) {
 		m.highlights[key] = make(map[string]map[int][]TextHighlight)
 	}
 	m.highlights[key][namespace] = byLine
+	m.rebuildHighlightsCacheLocked(key)
 }
 
 // ClearHighlights clears inline text highlights for a file and/or namespace.
@@ -775,25 +956,28 @@ func (m *Manager) ClearHighlights(path, namespace string) {
 	if path == "" {
 		if namespace == "" {
 			m.highlights = make(map[string]map[string]map[int][]TextHighlight)
+			m.cachedHighlights = make(map[string]map[int][]TextHighlight)
 			return
 		}
-		for _, byNS := range m.highlights {
+		for key, byNS := range m.highlights {
 			delete(byNS, namespace)
+			m.rebuildHighlightsCacheLocked(key)
 		}
 		return
 	}
 	key := normalizePathKey(path)
 	if namespace == "" {
 		delete(m.highlights, key)
+		delete(m.cachedHighlights, key)
 		return
 	}
 	if byNS, ok := m.highlights[key]; ok {
 		delete(byNS, namespace)
+		m.rebuildHighlightsCacheLocked(key)
 	}
 }
 
-// HighlightsByLine returns merged inline highlights for a file grouped by 0-based row,
-// sorted by ascending priority so higher-priority spans win when overlapping.
+// HighlightsByLine returns pre-merged immutable inline highlights for a file grouped by 0-based row.
 func (m *Manager) HighlightsByLine(path string) map[int][]TextHighlight {
 	if m == nil || path == "" {
 		return nil
@@ -801,35 +985,10 @@ func (m *Manager) HighlightsByLine(path string) map[int][]TextHighlight {
 	key := normalizePathKey(path)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	byNS := m.highlights[key]
-	if len(byNS) == 0 {
-		return nil
-	}
-	merged := make(map[int][]TextHighlight)
-	for _, perLine := range byNS {
-		for row, list := range perLine {
-			merged[row] = append(merged[row], list...)
-		}
-	}
-	if len(merged) == 0 {
-		return nil
-	}
-	for row := range merged {
-		list := merged[row]
-		if len(list) > 1 {
-			sort.Slice(list, func(i, j int) bool {
-				if list[i].Priority != list[j].Priority {
-					return list[i].Priority < list[j].Priority
-				}
-				return list[i].Col < list[j].Col
-			})
-		}
-	}
-	return merged
+	return m.cachedHighlights[key]
 }
 
-// EffectiveGutterSigns merges explicit gutter signs and diagnostic markers for a file.
-// Higher priority wins (diagnostics default to priority 40..10 for Error..Hint).
+// EffectiveGutterSigns returns pre-merged immutable gutter signs (diagnostics + explicit signs) for a file.
 func (m *Manager) EffectiveGutterSigns(path string) map[int]GutterSign {
 	if m == nil || path == "" {
 		return nil
@@ -837,32 +996,7 @@ func (m *Manager) EffectiveGutterSigns(path string) map[int]GutterSign {
 	key := normalizePathKey(path)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	result := make(map[int]GutterSign)
-
-	// 1. Add diagnostic indicators
-	for _, list := range m.diagnostics[key] {
-		for _, d := range list {
-			sign := diagnosticGutterSign(d)
-			if existing, ok := result[d.Line]; !ok || sign.Priority > existing.Priority {
-				result[d.Line] = sign
-			}
-		}
-	}
-
-	// 2. Overlay explicit plugin gutter signs
-	for _, byLine := range m.gutterSigns[key] {
-		for line, sign := range byLine {
-			if existing, ok := result[line]; !ok || sign.Priority >= existing.Priority {
-				result[line] = sign
-			}
-		}
-	}
-
-	if len(result) == 0 {
-		return nil
-	}
-	return result
+	return m.cachedGutterSigns[key]
 }
 
 func diagnosticGutterSign(d Diagnostic) GutterSign {
@@ -886,15 +1020,17 @@ func (m *Manager) SetBadge(b StatusBadge) {
 	defer m.mu.Unlock()
 	if b.Text == "" {
 		delete(m.badges, b.ID)
-		return
+	} else {
+		m.badges[b.ID] = b
 	}
-	m.badges[b.ID] = b
+	m.rebuildBadgesCacheLocked()
 }
 
 func (m *Manager) ClearBadge(id string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.badges, id)
+	m.rebuildBadgesCacheLocked()
 }
 
 func (m *Manager) Badges() []StatusBadge {
@@ -903,20 +1039,7 @@ func (m *Manager) Badges() []StatusBadge {
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if len(m.badges) == 0 {
-		return nil
-	}
-	out := make([]StatusBadge, 0, len(m.badges))
-	for _, b := range m.badges {
-		out = append(out, b)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Priority != out[j].Priority {
-			return out[i].Priority > out[j].Priority
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out
+	return m.cachedBadges
 }
 
 // ── External command execution ──

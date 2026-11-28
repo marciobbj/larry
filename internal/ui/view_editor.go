@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"larry/internal/git"
@@ -33,10 +34,10 @@ type editorRenderState struct {
 	gutterSigns     map[int]plugin.GutterSign
 	diagsByRow      map[int][]plugin.Diagnostic
 	highlightsByRow map[int][]plugin.TextHighlight
-	hlStyleCache    map[highlightStyleKey]lipgloss.Style
+	uiANSI          compiledUIANSI
 }
 
-func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderState {
+func newEditorRenderState(m *Model, viewStartRow, viewEndRow int) editorRenderState {
 	cursors := m.allCursors()
 	byRow := make(map[int][]CursorSelection, len(cursors))
 	for _, c := range cursors {
@@ -47,15 +48,11 @@ func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderSta
 	var gutterSigns map[int]plugin.GutterSign
 	var diagsByRow map[int][]plugin.Diagnostic
 	var highlightsByRow map[int][]plugin.TextHighlight
-	var hlCache map[highlightStyleKey]lipgloss.Style
 	if m.plugins != nil && m.FileName != "" {
-		absPath := normalizeAbsPath(m.FileName)
+		absPath := m.activeAbsPath()
 		gutterSigns = m.plugins.EffectiveGutterSigns(absPath)
 		diagsByRow = m.plugins.DiagnosticsByLine(absPath)
 		highlightsByRow = m.plugins.HighlightsByLine(absPath)
-		if len(highlightsByRow) > 0 {
-			hlCache = make(map[highlightStyleKey]lipgloss.Style, 16)
-		}
 	}
 	return editorRenderState{
 		cursors:         cursors,
@@ -65,46 +62,11 @@ func newEditorRenderState(m Model, viewStartRow, viewEndRow int) editorRenderSta
 		gutterSigns:     gutterSigns,
 		diagsByRow:      diagsByRow,
 		highlightsByRow: highlightsByRow,
-		hlStyleCache:    hlCache,
+		uiANSI:          getCompiledUIANSI(),
 	}
 }
 
-func (rs editorRenderState) resolveHighlightStyle(h plugin.TextHighlight) lipgloss.Style {
-	key := highlightStyleKey{
-		fg:        h.FG,
-		bg:        h.BG,
-		bold:      h.Bold,
-		italic:    h.Italic,
-		underline: h.Underline,
-	}
-	if rs.hlStyleCache != nil {
-		if st, ok := rs.hlStyleCache[key]; ok {
-			return st
-		}
-	}
-	st := lipgloss.NewStyle()
-	if h.FG != "" {
-		st = st.Foreground(paletteColorByName(h.FG))
-	}
-	if h.BG != "" {
-		st = st.Background(paletteColorByName(h.BG))
-	}
-	if h.Bold {
-		st = st.Bold(true)
-	}
-	if h.Italic {
-		st = st.Italic(true)
-	}
-	if h.Underline {
-		st = st.Underline(true)
-	}
-	if rs.hlStyleCache != nil {
-		rs.hlStyleCache[key] = st
-	}
-	return st
-}
-
-func (rs editorRenderState) isSelected(row, col int) bool {
+func (rs *editorRenderState) isSelected(row, col int) bool {
 	// Fast path: check cursors touching this row.
 	if len(rs.cursors) <= 8 {
 		for _, c := range rs.cursors {
@@ -165,7 +127,7 @@ func (rs editorRenderState) hasCursorAt(row, col int) (isCursor bool, isSelectin
 	return false, false
 }
 
-func (rs editorRenderState) hasNonSelectingCursorAtEOL(row, lineLen int) bool {
+func (rs *editorRenderState) hasNonSelectingCursorAtEOL(row, lineLen int) bool {
 	for _, c := range rs.cursorsByRow[row] {
 		if !c.Selecting && c.Col == lineLen {
 			return true
@@ -174,16 +136,17 @@ func (rs editorRenderState) hasNonSelectingCursorAtEOL(row, lineLen int) bool {
 	return false
 }
 
-func (m Model) viewEditor(cfg editorViewConfig) string {
+func (m *Model) viewEditor(cfg editorViewConfig) string {
 	if len(m.Lines) == 0 {
+		uiANSI := getCompiledUIANSI()
 		s := strings.Builder{}
 		if !cfg.hideLeftBorder {
-			s.WriteString(borderStyle.Render("│"))
+			s.WriteString(uiANSI.borderStr)
 		}
 		if m.Config.LineNumbers {
-			s.WriteString(lineNumStyle.Render("   1 "))
+			s.WriteString(uiANSI.lineNum.wrap("   1 "))
 		}
-		s.WriteString(styleCursor.Render(" "))
+		s.WriteString(uiANSI.cursorSpace)
 		s.WriteString("\n")
 		return s.String()
 	}
@@ -214,7 +177,7 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 			endLine = len(m.Lines)
 		}
 		rs := newEditorRenderState(m, startLine, endLine)
-		return m.viewEditorNoWrap(cfg, textWidth, maxVisualLines, rs)
+		return m.viewEditorNoWrap(cfg, textWidth, maxVisualLines, &rs)
 	}
 
 	lines := m.Lines
@@ -224,6 +187,7 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		tabWidth = 4
 	}
 	var s strings.Builder
+	s.Grow(maxVisualLines * 128)
 	visualLinesRendered := 0
 
 	startLine, startVisualOffset := m.locateVisualOffset(m.yOffset, textWidth)
@@ -232,6 +196,8 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		endLine = len(lines)
 	}
 	rs := newEditorRenderState(m, startLine, endLine)
+	uiANSI := rs.uiANSI
+	blankNumSpaces := strings.Repeat(" ", numDigits+1)
 
 	for lineNum := startLine; lineNum < len(lines) && visualLinesRendered < maxVisualLines; lineNum++ {
 		line := lines[lineNum]
@@ -241,6 +207,19 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 		if lineNum == startLine {
 			skipVisualLines = startVisualOffset
 		}
+
+		syntaxANSI := m.getANSIStylesForLine(lineNum)
+		var pSign *plugin.GutterSign
+		if rs.gutterSigns != nil {
+			if gs, ok := rs.gutterSigns[lineNum]; ok {
+				pSign = &gs
+			}
+		}
+		gitChange := rs.gitChanges[lineNum]
+		lineHls := rs.highlightsByRow[lineNum]
+		lineDiags := rs.diagsByRow[lineNum]
+		lineOccs := rs.occByRow[lineNum]
+		lineCursors := rs.cursorsByRow[lineNum]
 
 		renderChunk := func(runes []rune, startIdx, endIdx int, isFirst bool, _ int) {
 			if visualLinesRendered >= maxVisualLines {
@@ -252,22 +231,17 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 			}
 
 			if !cfg.hideLeftBorder {
-				s.WriteString(borderStyle.Render("│"))
+				s.WriteString(uiANSI.borderStr)
 			}
 			if m.Config.LineNumbers {
-				var pSign *plugin.GutterSign
-				if s, ok := rs.gutterSigns[lineNum]; ok {
-					pSign = &s
-				}
-				s.WriteString(formatGutterWithSign(lineNum, numDigits, isFirst, rs.gitChanges[lineNum], pSign))
+				writeGutterANSI(&s, lineNum, numDigits, blankNumSpaces, isFirst, gitChange, pSign, uiANSI)
 			}
 
-			syntaxStyles := m.getStylesForLine(lineNum)
-
+			rw := lineRunWriter{s: &s}
 			drawn := 0
 			for i := startIdx; i < endIdx; i++ {
 				ch := runes[i]
-				style, applyStyle, isDirectCursor := m.resolveCharStyle(lineNum, i, syntaxStyles, rs)
+				style, isDirectCursor := m.resolveCharANSI(lineNum, i, syntaxANSI, lineHls, lineDiags, lineOccs, lineCursors, &rs)
 				if ch == '\t' {
 					rem := textWidth - drawn
 					if rem <= 0 {
@@ -277,30 +251,63 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 					if tw > rem {
 						tw = rem
 					}
-					writeStyledSpaces(&s, tw, style, applyStyle, isDirectCursor)
+					rw.writeSpaces(tw, style, isDirectCursor, uiANSI.cursor, uiANSI.canvasBg)
 					drawn += tw
+					continue
+				}
+				if ch >= 0x20 && ch <= 0x7e {
+					if drawn+1 > textWidth {
+						break
+					}
+					if isDirectCursor {
+						rw.setStyle(uiANSI.cursor)
+					} else {
+						rw.setStyle(style)
+					}
+					s.WriteByte(byte(ch))
+					drawn++
 					continue
 				}
 				visualChar, charWidth := sanitizeDisplayRune(ch)
 				if charWidth > 0 && drawn+charWidth > textWidth {
 					if drawn == 0 && textWidth >= 1 {
-						writeStyledVisual(&s, "·", style, applyStyle, isDirectCursor)
+						if isDirectCursor {
+							rw.setStyle(uiANSI.cursor)
+						} else {
+							rw.setStyle(style)
+						}
+						s.WriteString("·")
 						drawn++
 					}
 					break
 				}
-				writeStyledVisual(&s, visualChar, style, applyStyle, isDirectCursor)
+				if isDirectCursor {
+					rw.setStyle(uiANSI.cursor)
+				} else {
+					rw.setStyle(style)
+				}
+				s.WriteString(visualChar)
 				drawn += charWidth
 			}
+			rw.flush()
 
 			if endIdx == len(runes) && rs.hasNonSelectingCursorAtEOL(lineNum, len(runes)) && drawn < textWidth {
-				s.WriteString(styleCursor.Render(" "))
+				s.WriteString(uiANSI.cursorSpace)
+				drawn++
 			}
 
-			s.WriteString("\x1b[K")
+			if uiANSI.paintBg && drawn < textWidth {
+				s.WriteString(uiANSI.canvasBg.prefix)
+				for pad := textWidth - drawn; pad > 0; pad-- {
+					s.WriteByte(' ')
+				}
+				s.WriteString(uiANSI.canvasBg.suffix)
+			}
+
+			s.WriteString(uiANSI.eolClear)
 			visualLinesRendered++
 			if visualLinesRendered < maxVisualLines {
-				s.WriteString("\n")
+				s.WriteByte('\n')
 			}
 			lineVisualOffset++
 		}
@@ -333,15 +340,19 @@ func (m Model) viewEditor(cfg editorViewConfig) string {
 	return s.String()
 }
 
-func (m Model) viewEditorNoWrap(
+func (m *Model) viewEditorNoWrap(
 	cfg editorViewConfig,
 	textWidth int,
 	maxVisualLines int,
-	rs editorRenderState,
+	rs *editorRenderState,
 ) string {
 	lines := m.Lines
 	numDigits := lineNumberDigits(len(lines))
+	uiANSI := rs.uiANSI
+	blankNumSpaces := strings.Repeat(" ", numDigits+1)
+
 	var s strings.Builder
+	s.Grow(maxVisualLines * 128)
 
 	startLine := m.yOffset
 	if startLine < 0 {
@@ -363,24 +374,39 @@ func (m Model) viewEditorNoWrap(
 	rendered := 0
 	for lineNum := startLine; lineNum < len(lines) && rendered < maxVisualLines; lineNum++ {
 		if !cfg.hideLeftBorder {
-			s.WriteString(borderStyle.Render("│"))
+			s.WriteString(uiANSI.borderStr)
 		}
 		if m.Config.LineNumbers {
 			var pSign *plugin.GutterSign
-			if s, ok := rs.gutterSigns[lineNum]; ok {
-				pSign = &s
+			if rs.gutterSigns != nil {
+				if gs, ok := rs.gutterSigns[lineNum]; ok {
+					pSign = &gs
+				}
 			}
-			s.WriteString(formatGutterWithSign(lineNum, numDigits, true, rs.gitChanges[lineNum], pSign))
+			writeGutterANSI(&s, lineNum, numDigits, blankNumSpaces, true, rs.gitChanges[lineNum], pSign, uiANSI)
 		}
 
-		lineRunes := []rune(lines[lineNum])
-		syntaxStyles := m.getStylesForLine(lineNum)
+		line := lines[lineNum]
+		lineRunes := []rune(line)
+		syntaxANSI := m.getANSIStylesForLine(lineNum)
+		lineHls := rs.highlightsByRow[lineNum]
+		lineDiags := rs.diagsByRow[lineNum]
+		lineOccs := rs.occByRow[lineNum]
+		lineCursors := rs.cursorsByRow[lineNum]
 
+		rw := lineRunWriter{s: &s}
 		visCol := 0
 		drawn := 0
 		for i := 0; i < len(lineRunes); i++ {
 			ch := lineRunes[i]
-			charWidth := displayRuneWidth(ch, tabWidth)
+			var charWidth int
+			if ch >= 0x20 && ch <= 0x7e {
+				charWidth = 1
+			} else if ch == '\t' {
+				charWidth = tabWidth
+			} else {
+				charWidth = displayRuneWidth(ch, tabWidth)
+			}
 
 			charEnd := visCol + charWidth
 			if charEnd <= xOff {
@@ -392,9 +418,17 @@ func (m Model) viewEditorNoWrap(
 				break
 			}
 
-			style, applyStyle, isDirectCursor := m.resolveCharStyle(lineNum, i, syntaxStyles, rs)
+			style, isDirectCursor := m.resolveCharANSI(lineNum, i, syntaxANSI, lineHls, lineDiags, lineOccs, lineCursors, rs)
 
-			if ch == '\t' {
+			if ch >= 0x20 && ch <= 0x7e {
+				if isDirectCursor {
+					rw.setStyle(uiANSI.cursor)
+				} else {
+					rw.setStyle(style)
+				}
+				s.WriteByte(byte(ch))
+				drawn++
+			} else if ch == '\t' {
 				visStart := visCol
 				if visStart < xOff {
 					visStart = xOff
@@ -410,7 +444,7 @@ func (m Model) viewEditorNoWrap(
 					}
 					if sliceLen > 0 {
 						isCursorStart := isDirectCursor && visStart == visCol
-						writeStyledSpaces(&s, sliceLen, style, applyStyle, isCursorStart)
+						rw.writeSpaces(sliceLen, style, isCursorStart, uiANSI.cursor, uiANSI.canvasBg)
 						drawn += sliceLen
 					}
 				}
@@ -428,7 +462,7 @@ func (m Model) viewEditorNoWrap(
 						rem = textWidth - drawn
 					}
 					if rem > 0 {
-						writeStyledSpaces(&s, rem, style, applyStyle, false)
+						rw.writeSpaces(rem, style, false, uiANSI.cursor, uiANSI.canvasBg)
 						drawn += rem
 					}
 				} else if w > 0 && drawn+w > textWidth {
@@ -437,29 +471,92 @@ func (m Model) viewEditorNoWrap(
 					visCol = charEnd
 					break
 				} else {
-					writeStyledVisual(&s, visualChar, style, applyStyle, isDirectCursor)
+					if isDirectCursor {
+						rw.setStyle(uiANSI.cursor)
+					} else {
+						rw.setStyle(style)
+					}
+					s.WriteString(visualChar)
 					drawn += w
 				}
 			}
 
 			visCol = charEnd
 		}
+		rw.flush()
 
-		if rs.hasNonSelectingCursorAtEOL(lineNum, len(lineRunes)) {
-			eolCol := cursorVisualCol(lines[lineNum], len(lineRunes), tabWidth)
+		if len(lineCursors) > 0 && rs.hasNonSelectingCursorAtEOL(lineNum, len(lineRunes)) {
+			eolCol := cursorVisualCol(line, len(lineRunes), tabWidth)
 			if eolCol >= xOff && eolCol < xOff+textWidth && drawn < textWidth {
-				s.WriteString(styleCursor.Render(" "))
+				s.WriteString(uiANSI.cursorSpace)
+				drawn++
 			}
 		}
 
-		s.WriteString("\x1b[K")
+		if uiANSI.paintBg && drawn < textWidth {
+			s.WriteString(uiANSI.canvasBg.prefix)
+			for pad := textWidth - drawn; pad > 0; pad-- {
+				s.WriteByte(' ')
+			}
+			s.WriteString(uiANSI.canvasBg.suffix)
+		}
+
+		s.WriteString(uiANSI.eolClear)
 		rendered++
 		if rendered < maxVisualLines {
-			s.WriteString("\n")
+			s.WriteByte('\n')
 		}
 	}
 
 	return s.String()
+}
+
+func writeGutterANSI(
+	s *strings.Builder,
+	lineNum, numDigits int,
+	blankNumSpaces string,
+	isFirst bool,
+	change git.LineChange,
+	pluginSign *plugin.GutterSign,
+	uiANSI compiledUIANSI,
+) {
+	if isFirst && pluginSign != nil && pluginSign.Text != "" {
+		runes := []rune(pluginSign.Text)
+		s.WriteString(cachedGutterSignStr(string(runes[0]), pluginSign.Color))
+	} else {
+		switch change {
+		case git.LineAdded:
+			s.WriteString(uiANSI.gitAddedStr)
+		case git.LineModified:
+			s.WriteString(uiANSI.gitModifiedStr)
+		case git.LineDeletedBelow:
+			if isFirst {
+				s.WriteString(uiANSI.gitDeletedStr)
+			} else {
+				s.WriteString(uiANSI.gitEmptyStr)
+			}
+		default:
+			s.WriteString(uiANSI.gitEmptyStr)
+		}
+	}
+
+	if uiANSI.lineNum.prefix != "" {
+		s.WriteString(uiANSI.lineNum.prefix)
+	}
+	if isFirst {
+		var buf [20]byte
+		numBytes := strconv.AppendInt(buf[:0], int64(lineNum+1), 10)
+		for pad := numDigits - len(numBytes); pad > 0; pad-- {
+			s.WriteByte(' ')
+		}
+		s.Write(numBytes)
+		s.WriteByte(' ')
+	} else {
+		s.WriteString(blankNumSpaces)
+	}
+	if uiANSI.lineNum.suffix != "" {
+		s.WriteString(uiANSI.lineNum.suffix)
+	}
 }
 
 func formatGutter(lineNum, numDigits int, isFirst bool, change git.LineChange) string {
@@ -470,7 +567,6 @@ func formatGutterWithSign(lineNum, numDigits int, isFirst bool, change git.LineC
 	numStr := fmt.Sprintf("%*d ", numDigits, lineNum+1)
 	var signStyled string
 	if isFirst && pluginSign != nil && pluginSign.Text != "" {
-		// Plugin/diagnostic gutter sign takes precedence on the primary line row.
 		runes := []rune(pluginSign.Text)
 		glyph := string(runes[0])
 		signStyled = lipgloss.NewStyle().
@@ -499,125 +595,75 @@ func formatGutterWithSign(lineNum, numDigits int, isFirst bool, change git.LineC
 	return signStyled + lineNumStyle.Render(strings.Repeat(" ", len(numStr)))
 }
 
-func (m Model) resolveCharStyle(
+func (m *Model) resolveCharANSI(
 	lineNum, i int,
-	syntaxStyles []lipgloss.Style,
-	rs editorRenderState,
-) (lipgloss.Style, bool, bool) {
-	var style lipgloss.Style
-	applyStyle := false
+	syntaxANSI []ansiStyle,
+	lineHls []plugin.TextHighlight,
+	lineDiags []plugin.Diagnostic,
+	lineOccs []colSpan,
+	lineCursors []CursorSelection,
+	rs *editorRenderState,
+) (ansiStyle, bool) {
+	var style ansiStyle
 
-	if i < len(syntaxStyles) {
-		style = syntaxStyles[i]
-		applyStyle = true
+	if i < len(syntaxANSI) {
+		style = syntaxANSI[i]
+	}
+	if style.prefix == "" && style.suffix == "" && rs.uiANSI.paintBg {
+		style = rs.uiANSI.defaultText
 	}
 
-	if len(rs.highlightsByRow) > 0 {
-		if lineHls := rs.highlightsByRow[lineNum]; len(lineHls) > 0 {
-			for _, h := range lineHls {
-				if i >= h.Col && i < h.EndCol {
-					style = rs.resolveHighlightStyle(h)
-					applyStyle = true
+	if len(lineHls) > 0 {
+		for _, h := range lineHls {
+			if i >= h.Col && i < h.EndCol {
+				style = cachedHighlightANSI(h)
+			}
+		}
+	}
+
+	if len(lineDiags) > 0 {
+		for _, d := range lineDiags {
+			inSpan := (d.EndCol > d.Col && i >= d.Col && i < d.EndCol) || (d.EndCol <= d.Col && i >= d.Col)
+			if inSpan {
+				if d.Severity == plugin.SeverityError {
+					style = rs.uiANSI.diagError
+					break
+				} else if d.Severity == plugin.SeverityWarning {
+					style = rs.uiANSI.diagWarn
 				}
 			}
 		}
 	}
 
-	if len(rs.diagsByRow) > 0 {
-		if lineDiags := rs.diagsByRow[lineNum]; len(lineDiags) > 0 {
-			for _, d := range lineDiags {
-				if d.EndCol > d.Col {
-					if i >= d.Col && i < d.EndCol {
-						if d.Severity == plugin.SeverityError {
-							style = diagErrorUnderlineStyle
-							applyStyle = true
-							break
-						} else if d.Severity == plugin.SeverityWarning {
-							style = diagWarnUnderlineStyle
-							applyStyle = true
-						}
-					}
-				} else if i >= d.Col {
-					if d.Severity == plugin.SeverityError {
-						style = diagErrorUnderlineStyle
-						applyStyle = true
-						break
-					} else if d.Severity == plugin.SeverityWarning {
-						style = diagWarnUnderlineStyle
-						applyStyle = true
-					}
-				}
-			}
-		}
-	}
-
-	if len(rs.occByRow) > 0 && rs.isOccurrence(lineNum, i) {
-		style = styleOccurrence
-		applyStyle = true
-	}
-
-	if len(m.searchResults) > 0 {
-		for _, result := range m.searchResults {
-			if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
-				style = styleSearch
-				applyStyle = true
+	if len(lineOccs) > 0 {
+		for _, sp := range lineOccs {
+			if i >= sp.start && i < sp.end {
+				style = rs.uiANSI.occurrence
 				break
 			}
 		}
 	}
 
-	if rs.isSelected(lineNum, i) {
-		style = styleSelected
-		applyStyle = true
-	}
-
-	isCursor, cursorSelecting := rs.hasCursorAt(lineNum, i)
-	if isCursor {
-		style = styleCursor
-		applyStyle = true
-	}
-
-	return style, applyStyle, isCursor && !cursorSelecting
-}
-
-func writeStyledSpaces(
-	s *strings.Builder,
-	count int,
-	style lipgloss.Style,
-	applyStyle bool,
-	isCursorStart bool,
-) {
-	if count <= 0 {
-		return
-	}
-	if applyStyle {
-		if isCursorStart {
-			s.WriteString(styleCursor.Render(" "))
-			if count > 1 {
-				s.WriteString(strings.Repeat(" ", count-1))
+	if len(m.searchResults) > 0 {
+		for _, result := range m.searchResults {
+			if result.Line == lineNum && i >= result.Col && i < result.Col+result.Length {
+				style = rs.uiANSI.search
+				break
 			}
-		} else {
-			s.WriteString(style.Render(strings.Repeat(" ", count)))
 		}
-	} else {
-		s.WriteString(strings.Repeat(" ", count))
 	}
-}
 
-func writeStyledVisual(
-	s *strings.Builder,
-	visualChar string,
-	style lipgloss.Style,
-	applyStyle bool,
-	isDirectCursor bool,
-) {
-	if applyStyle {
-		if isDirectCursor {
-			s.WriteString(styleCursor.Render(visualChar))
-		} else {
-			s.WriteString(style.Render(visualChar))
-		}
-	} else {
-		s.WriteString(visualChar)
+	if (m.selecting || len(m.extraCursors) > 0) && rs.isSelected(lineNum, i) {
+		style = rs.uiANSI.selected
 	}
+
+	if len(lineCursors) > 0 {
+		for _, c := range lineCursors {
+			if c.Col == i {
+				return rs.uiANSI.cursor, !c.Selecting
+			}
+		}
+	}
+
+	return style, false
 }

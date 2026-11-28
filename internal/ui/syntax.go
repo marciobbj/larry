@@ -9,6 +9,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 const (
@@ -21,6 +22,9 @@ var (
 	theme            *chroma.Style
 	themeVersion     int
 	lipglossCache    sync.Map // map[chroma.TokenType]lipgloss.Style
+	ansiTokenCache   sync.Map // map[chroma.TokenType]ansiStyle
+	ansiCacheProfile termenv.Profile
+	ansiCacheProfMu  sync.Mutex
 	omarchyActive    bool
 	omarchyColorPath string
 	omarchySignature string
@@ -140,9 +144,12 @@ type fileSyntaxCache struct {
 	filename      string
 	contentVer    int
 	themeVer      int
+	profile       termenv.Profile
 	lineCount     int
 	fullFileValid bool
 	lines         [][]lipgloss.Style
+	ansiLines     [][]ansiStyle
+	ansiLineCache map[int][]ansiStyle
 }
 
 func init() {
@@ -164,6 +171,165 @@ func clearSyntaxCache() {
 		lipglossCache.Delete(key)
 		return true
 	})
+	ansiTokenCache.Range(func(key, value interface{}) bool {
+		ansiTokenCache.Delete(key)
+		return true
+	})
+}
+
+func ensureANSITokenCacheProfile() termenv.Profile {
+	prof := lipgloss.ColorProfile()
+	ansiCacheProfMu.Lock()
+	if ansiCacheProfile != prof {
+		ansiTokenCache.Range(func(key, _ any) bool {
+			ansiTokenCache.Delete(key)
+			return true
+		})
+		ansiCacheProfile = prof
+	}
+	ansiCacheProfMu.Unlock()
+	return prof
+}
+
+func getANSIStyleForToken(tokenType chroma.TokenType) ansiStyle {
+	if s, ok := ansiTokenCache.Load(tokenType); ok {
+		return s.(ansiStyle)
+	}
+	compiled := compileANSIStyle(getStyleForToken(tokenType))
+	ansiTokenCache.Store(tokenType, compiled)
+	return compiled
+}
+
+func tokenizeLinesANSI(lines []string, filename string) [][]ansiStyle {
+	result := make([][]ansiStyle, len(lines))
+	for i, line := range lines {
+		result[i] = make([]ansiStyle, len([]rune(line)))
+	}
+	if len(lines) == 0 {
+		return result
+	}
+
+	sample := lines[0]
+	if strings.TrimSpace(sample) == "" {
+		for i := 1; i < len(lines) && i < 10; i++ {
+			if strings.TrimSpace(lines[i]) != "" {
+				sample = lines[i]
+				break
+			}
+		}
+	}
+
+	lexer := resolveLexer(filename, sample)
+	fullText := strings.Join(lines, "\n") + "\n"
+	iterator, err := lexer.Tokenise(nil, fullText)
+	if err != nil {
+		return result
+	}
+
+	row := 0
+	col := 0
+	for _, token := range iterator.Tokens() {
+		style := getANSIStyleForToken(token.Type)
+		for _, r := range token.Value {
+			if r == '\n' {
+				row++
+				col = 0
+				continue
+			}
+			if row < len(result) && col < len(result[row]) {
+				result[row][col] = style
+				col++
+			}
+		}
+	}
+
+	return result
+}
+
+func getLineANSIStyles(line string, filename string) []ansiStyle {
+	runes := []rune(line)
+	result := make([]ansiStyle, len(runes))
+	if len(runes) == 0 {
+		return result
+	}
+
+	lexer := resolveLexer(filename, line)
+	iterator, err := lexer.Tokenise(nil, line+"\n")
+	if err != nil {
+		return result
+	}
+
+	cursor := 0
+	for _, token := range iterator.Tokens() {
+		style := getANSIStyleForToken(token.Type)
+		for _, r := range token.Value {
+			if r == '\n' {
+				continue
+			}
+			if cursor < len(result) {
+				result[cursor] = style
+				cursor++
+			}
+		}
+	}
+	return result
+}
+
+func (m *Model) getANSIStylesForLine(lineNum int) []ansiStyle {
+	if lineNum < 0 || lineNum >= len(m.Lines) {
+		return nil
+	}
+	prof := ensureANSITokenCacheProfile()
+	if m.syntaxCache != nil {
+		sc := m.syntaxCache
+		if sc.filename != m.FileName ||
+			sc.contentVer != m.visualLineVersion ||
+			sc.themeVer != themeVersion ||
+			sc.profile != prof ||
+			sc.lineCount != len(m.Lines) {
+			sc.filename = m.FileName
+			sc.contentVer = m.visualLineVersion
+			sc.themeVer = themeVersion
+			sc.profile = prof
+			sc.lineCount = len(m.Lines)
+			sc.fullFileValid = false
+			sc.lines = nil
+			sc.ansiLines = nil
+			sc.ansiLineCache = nil
+
+			if len(m.Lines) <= maxFullSyntaxLines {
+				totalBytes := 0
+				for _, l := range m.Lines {
+					totalBytes += len(l) + 1
+					if totalBytes > maxFullSyntaxBytes {
+						break
+					}
+				}
+				if totalBytes <= maxFullSyntaxBytes {
+					sc.ansiLines = tokenizeLinesANSI(m.Lines, m.FileName)
+					sc.fullFileValid = true
+				}
+			}
+		}
+		if sc.fullFileValid && lineNum < len(sc.ansiLines) {
+			return sc.ansiLines[lineNum]
+		}
+		// Per-line cache for huge files (>5000 lines or >256KB) so scrolling/navigation stays O(1).
+		if sc.ansiLineCache == nil {
+			sc.ansiLineCache = make(map[int][]ansiStyle, 64)
+		}
+		if cached, ok := sc.ansiLineCache[lineNum]; ok {
+			return cached
+		}
+		if len(sc.ansiLineCache) > 512 {
+			sc.ansiLineCache = make(map[int][]ansiStyle, 64)
+		}
+		computed := getLineANSIStyles(m.Lines[lineNum], m.FileName)
+		sc.ansiLineCache[lineNum] = computed
+		return computed
+	}
+
+	return getLineANSIStyles(m.Lines[lineNum], m.FileName)
 }
 
 func SetTheme(themeName string) {
@@ -173,6 +339,7 @@ func SetTheme(themeName string) {
 				theme = customStyle
 				activePalette = paletteFromOmarchy(colors)
 				omarchyActive = true
+				paintCanvasBg = false
 				omarchyColorPath = path
 				omarchySignature = OmarchyThemeSignature(path)
 				clearSyntaxCache()
@@ -196,6 +363,7 @@ func SetTheme(themeName string) {
 		if customStyle, err := BuildChromaStyleFromColors(cs.ID, cs.Colors); err == nil {
 			theme = customStyle
 			activePalette = paletteFromOmarchy(cs.Colors)
+			paintCanvasBg = true
 			clearSyntaxCache()
 			initStyles()
 			return
@@ -203,6 +371,7 @@ func SetTheme(themeName string) {
 	}
 
 	activePalette = defaultPalette(lipgloss.HasDarkBackground())
+	paintCanvasBg = !activePalette.IsDark
 
 	t := styles.Get(themeName)
 	if t == nil {
@@ -393,11 +562,13 @@ func getStyleForToken(tokenType chroma.TokenType) lipgloss.Style {
 	}
 
 	entry := theme.Get(tokenType)
-	style := lipgloss.NewStyle()
+	style := withCanvasBg(lipgloss.NewStyle())
 
 	hasColor := entry.Colour.IsSet()
 	if hasColor {
 		style = style.Foreground(lipgloss.Color(entry.Colour.String()))
+	} else if paintCanvasBg && activePalette.Foreground != "" {
+		style = style.Foreground(activePalette.Foreground)
 	}
 	if entry.Bold == chroma.Yes {
 		style = style.Bold(true)

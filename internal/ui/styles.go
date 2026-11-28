@@ -8,6 +8,7 @@ type UIPalette struct {
 	Accent      lipgloss.Color
 	AccentAlt   lipgloss.Color
 	AccentFg    lipgloss.Color
+	CanvasBg    lipgloss.Color
 	Background  lipgloss.Color
 	Surface     lipgloss.Color
 	Selection   lipgloss.Color
@@ -28,6 +29,10 @@ type UIPalette struct {
 
 var (
 	activePalette = defaultPalette(true)
+	paintCanvasBg = false
+
+	canvasBlankStyle  lipgloss.Style
+	sidebarBlankStyle lipgloss.Style
 
 	styleCursor     lipgloss.Style
 	styleSelected   lipgloss.Style
@@ -87,6 +92,7 @@ func defaultPalette(isDark bool) UIPalette {
 			Accent:      lipgloss.Color("62"),
 			AccentAlt:   lipgloss.Color("170"),
 			AccentFg:    lipgloss.Color("255"),
+			CanvasBg:    lipgloss.Color("235"),
 			Background:  lipgloss.Color("235"),
 			Surface:     lipgloss.Color("236"),
 			Selection:   lipgloss.Color("62"),
@@ -111,6 +117,7 @@ func defaultPalette(isDark bool) UIPalette {
 		Accent:      lipgloss.Color("62"),
 		AccentAlt:   lipgloss.Color("125"),
 		AccentFg:    lipgloss.Color("255"),
+		CanvasBg:    lipgloss.Color("255"),
 		Background:  lipgloss.Color("254"),
 		Surface:     lipgloss.Color("252"),
 		Selection:   lipgloss.Color("153"),
@@ -130,8 +137,34 @@ func defaultPalette(isDark bool) UIPalette {
 	}
 }
 
+func canvasBgColor() lipgloss.Color {
+	if activePalette.CanvasBg != "" {
+		return activePalette.CanvasBg
+	}
+	return activePalette.Background
+}
+
+func withCanvasBg(st lipgloss.Style) lipgloss.Style {
+	if paintCanvasBg {
+		if bg := canvasBgColor(); bg != "" {
+			return st.Background(bg)
+		}
+	}
+	return st
+}
+
+func withSidebarBg(st lipgloss.Style) lipgloss.Style {
+	if paintCanvasBg && activePalette.Background != "" {
+		return st.Background(activePalette.Background)
+	}
+	return st
+}
+
 func initStyles() {
 	p := activePalette
+
+	canvasBlankStyle = withCanvasBg(lipgloss.NewStyle())
+	sidebarBlankStyle = withSidebarBg(lipgloss.NewStyle())
 
 	styleCursor = lipgloss.NewStyle().Background(p.CursorBg).Foreground(p.CursorFg)
 	styleSelected = lipgloss.NewStyle().Background(p.Selection).Foreground(p.SelectionFg)
@@ -139,8 +172,8 @@ func initStyles() {
 	styleSearch = lipgloss.NewStyle().Background(p.Yellow).Foreground(lipgloss.Color("0"))
 	styleFile = lipgloss.NewStyle().Foreground(p.Foreground).Background(p.Background)
 	styleDir = lipgloss.NewStyle().Foreground(p.Blue).Bold(true).Background(p.Background)
-	lineNumStyle = lipgloss.NewStyle().Foreground(p.MutedFg)
-	borderStyle = lipgloss.NewStyle().Foreground(p.Border)
+	lineNumStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.MutedFg))
+	borderStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Border))
 	statusBarStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(p.Surface)
 
 	modalStyle = lipgloss.NewStyle().
@@ -180,34 +213,34 @@ func initStyles() {
 		Background(p.Surface).
 		MarginTop(1)
 
-	textInputStyle = lipgloss.NewStyle().Foreground(p.Foreground)
+	textInputStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Foreground))
 
-	treeHeaderStyle = lipgloss.NewStyle().Foreground(p.SubtleFg).Bold(true)
-	treeHeaderFocusedStyle = lipgloss.NewStyle().Foreground(p.Accent).Bold(true)
-	treeDividerStyle = lipgloss.NewStyle().Foreground(p.Border)
-	treeDividerFocusedStyle = lipgloss.NewStyle().Foreground(p.Accent)
-	treeGuideStyle = lipgloss.NewStyle().Foreground(p.Border)
-	treeDirStyle = lipgloss.NewStyle().Foreground(p.Blue).Bold(true)
-	treeFileStyle = lipgloss.NewStyle().Foreground(p.Foreground)
-	treeSymlinkStyle = lipgloss.NewStyle().Foreground(p.Cyan)
-	treeActiveFileStyle = lipgloss.NewStyle().Foreground(p.Green).Bold(true)
+	treeHeaderStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.SubtleFg).Bold(true))
+	treeHeaderFocusedStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.Accent).Bold(true))
+	treeDividerStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Border))
+	treeDividerFocusedStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Accent))
+	treeGuideStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.Border))
+	treeDirStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.Blue).Bold(true))
+	treeFileStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.Foreground))
+	treeSymlinkStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.Cyan))
+	treeActiveFileStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.Green).Bold(true))
 	treeCursorFocusedStyle = lipgloss.NewStyle().Background(p.Accent).Foreground(p.AccentFg).Bold(true)
 	treeCursorUnfocusedStyle = lipgloss.NewStyle().Background(p.Surface).Foreground(p.SubtleFg)
-	treeEmptyStyle = lipgloss.NewStyle().Foreground(p.MutedFg).Italic(true)
-	treeRuleStyle = lipgloss.NewStyle().Foreground(p.Border)
+	treeEmptyStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.MutedFg).Italic(true))
+	treeRuleStyle = withSidebarBg(lipgloss.NewStyle().Foreground(p.Border))
 
-	gitAddedStyle = lipgloss.NewStyle().Foreground(p.Green).Bold(true)
-	gitModifiedStyle = lipgloss.NewStyle().Foreground(p.Yellow).Bold(true)
-	gitDeletedStyle = lipgloss.NewStyle().Foreground(p.Red).Bold(true)
-	gitUntrackedStyle = lipgloss.NewStyle().Foreground(p.Cyan).Bold(true)
-	gitDirDirtyStyle = lipgloss.NewStyle().Foreground(p.Yellow)
+	gitAddedStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Green).Bold(true))
+	gitModifiedStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Yellow).Bold(true))
+	gitDeletedStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Red).Bold(true))
+	gitUntrackedStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Cyan).Bold(true))
+	gitDirDirtyStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Yellow))
 
-	diagErrorStyle = lipgloss.NewStyle().Foreground(p.Red).Bold(true)
-	diagWarnStyle = lipgloss.NewStyle().Foreground(p.Yellow).Bold(true)
-	diagInfoStyle = lipgloss.NewStyle().Foreground(p.Cyan).Bold(true)
-	diagHintStyle = lipgloss.NewStyle().Foreground(p.MutedFg)
-	diagErrorUnderlineStyle = lipgloss.NewStyle().Foreground(p.Red).Underline(true)
-	diagWarnUnderlineStyle = lipgloss.NewStyle().Foreground(p.Yellow).Underline(true)
+	diagErrorStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Red).Bold(true))
+	diagWarnStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Yellow).Bold(true))
+	diagInfoStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Cyan).Bold(true))
+	diagHintStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.MutedFg))
+	diagErrorUnderlineStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Red).Underline(true))
+	diagWarnUnderlineStyle = withCanvasBg(lipgloss.NewStyle().Foreground(p.Yellow).Underline(true))
 }
 
 // paletteColorByName resolves semantic color names from plugins into Larry's active UIPalette.

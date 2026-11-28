@@ -364,7 +364,7 @@ func (tp *ThemePickerModal) Render(totalW, totalH int) string {
 
 	cardStyle := modalStyle.Copy().Padding(vPad, 2)
 	card := cardStyle.Render(strings.Join(rows, "\n"))
-	return lipgloss.Place(totalW, totalH, lipgloss.Center, lipgloss.Center, card)
+	return placeCentered(totalW, totalH, card)
 }
 
 func (tp *ThemePickerModal) renderCategoryBar(innerW int, pal UIPalette, bg lipgloss.TerminalColor) string {

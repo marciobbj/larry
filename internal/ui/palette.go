@@ -288,7 +288,7 @@ func (p *PickerModal) Render(totalW, totalH int) string {
 	rows = append(rows, divider, footer)
 
 	card := modalStyle.Render(strings.Join(rows, "\n"))
-	return lipgloss.Place(totalW, totalH, lipgloss.Center, lipgloss.Center, card)
+	return placeCentered(totalW, totalH, card)
 }
 
 // HoverState stores an active floating documentation / diagnostic popup.
@@ -368,7 +368,7 @@ func (h HoverState) Render(totalW, totalH int) string {
 	rows = append(rows, footerStyleLocal.Render("↑/↓ Scroll · Esc Close"))
 
 	card := modalStyle.Render(strings.Join(rows, "\n"))
-	return lipgloss.Place(totalW, totalH, lipgloss.Center, lipgloss.Center, card)
+	return placeCentered(totalW, totalH, card)
 }
 
 // PanelState stores a plugin-controlled split output panel (right side of editor).

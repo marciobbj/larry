@@ -65,6 +65,7 @@ type Model struct {
 	syntaxCache        *fileSyntaxCache
 	gitDiffCache       *fileGitDiffCache
 	occCache           *occurrenceCache
+	statusCache        *statusBarCache
 	extraCursors       []CursorSelection
 	Lines              []string
 	CursorRow          int
@@ -163,6 +164,7 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 		syntaxCache:        &fileSyntaxCache{},
 		gitDiffCache:       &fileGitDiffCache{},
 		occCache:           &occurrenceCache{},
+		statusCache:        &statusBarCache{},
 		Lines:              lines,
 		CursorRow:          0,
 		CursorCol:          0,
@@ -592,7 +594,7 @@ func (m Model) gitLineChanges() map[int]git.LineChange {
 	if m.FileName == "" || len(m.Lines) == 0 || m.gitDiffCache == nil {
 		return nil
 	}
-	absPath := normalizeAbsPath(m.FileName)
+	absPath := m.activeAbsPath()
 	gc := m.gitDiffCache
 
 	if gc.absPath != absPath || !gc.base.Loaded {
@@ -1198,7 +1200,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.CursorRow != prevRow {
 				m.lastCursorRow = m.CursorRow
-				m.plugins.Emit(m.editorAPI(), plugin.EventCursorMove, nil)
+				if m.plugins.HasHandlers(plugin.EventCursorMove) {
+					m.plugins.Emit(m.editorAPI(), plugin.EventCursorMove, nil)
+				}
 			}
 		}
 
@@ -1244,11 +1248,7 @@ func (m Model) View() string {
 		body := m.finder.Render(innerW, innerH)
 		modal := modalStyle.Render(body)
 
-		return lipgloss.Place(
-			m.Width, m.Height,
-			lipgloss.Center, lipgloss.Center,
-			modal,
-		)
+		return placeCentered(m.Width, m.Height, modal)
 	}
 
 	if m.globalReplacing {
@@ -1284,11 +1284,7 @@ func (m Model) View() string {
 
 		modal := modalStyle.Render(strings.Join(allLines, "\n"))
 
-		return lipgloss.Place(
-			m.Width, m.Height,
-			lipgloss.Center, lipgloss.Center,
-			modal,
-		)
+		return placeCentered(m.Width, m.Height, modal)
 	}
 
 	if m.themePickerActive {
@@ -1308,9 +1304,19 @@ func (m Model) View() string {
 	}
 
 	status := m.renderStatusBar()
+	statusHeight := strings.Count(status, "\n") + 1
+	if statusHeight < 1 {
+		statusHeight = 1
+	}
 
-	wsHeight := m.workspaceHeight()
-	editorHeight := m.editorViewportHeight()
+	wsHeight := m.Height - statusHeight
+	if wsHeight < 1 {
+		wsHeight = 1
+	}
+	editorHeight := wsHeight - m.tabBarHeight()
+	if editorHeight < 1 {
+		editorHeight = 1
+	}
 	treeW := m.sidebarWidth()
 	mainW := m.mainContentWidth()
 
@@ -1325,14 +1331,15 @@ func (m Model) View() string {
 		} else if m.viewMode == ViewModeSplit && isMarkdownFile(m.FileName) {
 			editorArea = m.viewSplit()
 		} else if len(m.Lines) == 0 {
+			uiANSI := getCompiledUIANSI()
 			s := strings.Builder{}
 			if treeW == 0 {
-				s.WriteString(borderStyle.Render("│"))
+				s.WriteString(uiANSI.borderStr)
 			}
 			if m.Config.LineNumbers {
-				s.WriteString(lineNumStyle.Render("   1 "))
+				s.WriteString(uiANSI.lineNum.wrap("   1 "))
 			}
-			s.WriteString(styleCursor.Render(" "))
+			s.WriteString(uiANSI.cursorSpace)
 			s.WriteString("\n")
 			editorArea = s.String()
 		} else {
@@ -1346,17 +1353,18 @@ func (m Model) View() string {
 
 		if m.showTabBar() {
 			tabBar := m.renderTabBar(mainW)
-			mainView = lipgloss.JoinVertical(lipgloss.Left, tabBar, editorArea)
+			mainView = tabBar + "\n" + editorArea
 		} else {
 			mainView = editorArea
 		}
 	}
 
+	uiANSI := getCompiledUIANSI()
 	baseView := mainView
 	if treeW > 0 {
 		treeView := m.fileTree.View(treeW, wsHeight)
 		divider := m.fileTree.DividerView(wsHeight)
-		baseView = lipgloss.JoinHorizontal(lipgloss.Top, treeView, divider, mainView)
+		baseView = joinSidebarAndMain(treeView, divider, mainView, treeW, mainW, wsHeight, uiANSI)
 	}
 
 	if m.saving {
@@ -1387,13 +1395,23 @@ func (m Model) View() string {
 	}
 
 	// Pad baseView so the status bar is always at the bottom of the terminal
-	baseHeight := lipgloss.Height(baseView)
-	statusHeight := lipgloss.Height(status)
+	baseHeight := strings.Count(baseView, "\n") + 1
 	totalUsed := baseHeight + statusHeight
 	if totalUsed < m.Height {
-		padding := strings.Repeat("\n", m.Height-totalUsed)
-		baseView = baseView + padding
+		missing := m.Height - totalUsed
+		if uiANSI.paintBg && m.Width > 0 {
+			blankRow := uiANSI.canvasBg.wrap(strings.Repeat(" ", m.Width)) + uiANSI.eolClear
+			var pad strings.Builder
+			pad.Grow(missing * (len(blankRow) + 1))
+			for i := 0; i < missing; i++ {
+				pad.WriteByte('\n')
+				pad.WriteString(blankRow)
+			}
+			baseView += pad.String()
+		} else {
+			baseView += strings.Repeat("\n", missing)
+		}
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, baseView, status)
+	return baseView + "\n" + status
 }

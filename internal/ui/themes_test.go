@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"larry/internal/config"
 )
@@ -198,5 +199,45 @@ func TestBuiltinColorschemesPluginAppearsInLoadedPluginsAndRespectsDisabled(t *t
 	m2 = updated.(Model)
 	if m2.themePickerActive {
 		t.Fatal("expected disabled colorschemes plugin not to open picker")
+	}
+}
+
+func TestLightThemePaintsCanvasBackgroundInEditorAndTree(t *testing.T) {
+	isolatePluginsDir(t)
+
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	cfg := config.DefaultConfig()
+	cfg.Theme = "tokyo-night-day" // Background: #e1e2e7 -> RGB 225,226,231
+
+	m := InitialModel("main.go", []string{"package main", "", "func main() {}"}, cfg)
+	defer m.ClosePlugins()
+	m.Width = 100
+	m.Height = 20
+	m.OpenDirectory(".")
+	m.fileTree.Focused = false
+
+	if !paintCanvasBg {
+		t.Fatal("expected paintCanvasBg=true for built-in light colorscheme tokyo-night-day")
+	}
+
+	view := m.View()
+	// #e1e2e7 in 24-bit ANSI background SGR is 48;2;225;226;231
+	const wantBgSGR = "48;2;225;226;231"
+	if !strings.Contains(view, wantBgSGR) {
+		t.Fatalf("expected full editor/tree view to paint tokyo-night-day background (%s)", wantBgSGR)
+	}
+
+	// Verify every rendered editor row (excluding status bar and tab bar) carries the light background.
+	lines := strings.Split(view, "\n")
+	if len(lines) < 10 {
+		t.Fatalf("expected full height view, got %d lines", len(lines))
+	}
+	for i := 2; i < len(lines)-1; i++ {
+		if !strings.Contains(lines[i], wantBgSGR) {
+			t.Fatalf("row %d missing light canvas background (%s): %q", i, wantBgSGR, lines[i])
+		}
 	}
 }

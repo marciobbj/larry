@@ -7,15 +7,94 @@ import (
 	"larry/internal/plugin"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
+
+type statusBarCacheKey struct {
+	width          int
+	fileName       string
+	modified       bool
+	gitBranch      string
+	wordWrap       bool
+	cursorCount    int
+	statusMsg      string
+	treeVisible    bool
+	treeFocused    bool
+	viewMode       ViewMode
+	leaderKey      string
+	searchQuery    string
+	searchCount    int
+	searchIndex    int
+	themeVer       int
+	profile        termenv.Profile
+	pluginUIVer    int64
+	activeDiagMsg  string
+	activeDiagSev  plugin.DiagnosticSeverity
+}
+
+type statusBarCache struct {
+	valid    bool
+	key      statusBarCacheKey
+	rendered string
+}
 
 // renderStatusBar builds a styled status bar with file info on the left
 // and shortcut hints on the right side.
-func (m Model) renderStatusBar() string {
+func (m *Model) renderStatusBar() string {
 	width := m.Width
 	if width < 20 {
 		width = 20
 	}
+
+	var pluginUIVer int64
+	var activeDiagMsg string
+	var activeDiagSev plugin.DiagnosticSeverity
+	if m.plugins != nil {
+		pluginUIVer = m.plugins.UIVersion()
+		if m.statusMsg == "" && m.FileName != "" {
+			if lineDiags := m.plugins.DiagnosticsByLine(m.activeAbsPath())[m.CursorRow]; len(lineDiags) > 0 {
+				activeDiagMsg = lineDiags[0].Message
+				activeDiagSev = lineDiags[0].Severity
+			}
+		}
+	}
+
+	key := statusBarCacheKey{
+		width:         width,
+		fileName:      m.FileName,
+		modified:      m.Modified,
+		gitBranch:     m.fileTree.GitBranch,
+		wordWrap:      m.Config.WordWrap,
+		cursorCount:   len(m.extraCursors),
+		statusMsg:     m.statusMsg,
+		treeVisible:   m.fileTree.Visible,
+		treeFocused:   m.fileTree.Focused,
+		viewMode:      m.viewMode,
+		leaderKey:     m.Config.LeaderKey,
+		searchQuery:   m.searchQuery,
+		searchCount:   len(m.searchResults),
+		searchIndex:   m.currentResultIndex,
+		themeVer:      themeVersion,
+		profile:       lipgloss.ColorProfile(),
+		pluginUIVer:   pluginUIVer,
+		activeDiagMsg: activeDiagMsg,
+		activeDiagSev: activeDiagSev,
+	}
+
+	if m.statusCache != nil && m.statusCache.valid && m.statusCache.key == key {
+		return m.statusCache.rendered
+	}
+
+	rendered := m.renderStatusBarUncached(width)
+	if m.statusCache != nil {
+		m.statusCache.key = key
+		m.statusCache.rendered = rendered
+		m.statusCache.valid = true
+	}
+	return rendered
+}
+
+func (m *Model) renderStatusBarUncached(width int) string {
 
 	p := activePalette
 
@@ -99,7 +178,7 @@ func (m Model) renderStatusBar() string {
 	}
 	if m.plugins != nil {
 		if m.FileName != "" {
-			errs, warns := m.plugins.DiagnosticCounts(normalizeAbsPath(m.FileName))
+			errs, warns := m.plugins.DiagnosticCounts(m.activeAbsPath())
 			if errs > 0 {
 				fileSection += lipgloss.NewStyle().
 					Background(barBg).
@@ -143,7 +222,7 @@ func (m Model) renderStatusBar() string {
 
 	// ── If cursor is on a line with a diagnostic, surface its message cleanly ──
 	if m.plugins != nil && m.FileName != "" {
-		if lineDiags := m.plugins.DiagnosticsByLine(normalizeAbsPath(m.FileName))[m.CursorRow]; len(lineDiags) > 0 {
+		if lineDiags := m.plugins.DiagnosticsByLine(m.activeAbsPath())[m.CursorRow]; len(lineDiags) > 0 {
 			d := lineDiags[0]
 			diagColor := p.Cyan
 			prefix := "ℹ "
@@ -262,6 +341,12 @@ func (m Model) renderStatusBar() string {
 }
 
 func (m Model) statusBarHeight() int {
+	// Fast path: on normal-width terminals where the filename & status text fit
+	// comfortably on a single row, skip rendering the full status bar just to
+	// measure its height.
+	if m.Width >= 90 && len(m.FileName) < m.Width/3 && len(m.statusMsg) < m.Width/2 {
+		return 1
+	}
 	height := lipgloss.Height(m.renderStatusBar())
 	if height < 1 {
 		return 1
