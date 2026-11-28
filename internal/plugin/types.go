@@ -110,6 +110,16 @@ type PickerItem struct {
 	Col    int // 0-based
 }
 
+// CompletionItem represents a single inline autocomplete suggestion shown
+// in Larry's cursor-anchored floating completion popup.
+type CompletionItem struct {
+	Label      string
+	InsertText string
+	Kind       string
+	Detail     string
+	Doc        string
+}
+
 // PluginInfo reports discovery and load status for a single plugin.
 type PluginInfo struct {
 	Name        string
@@ -180,6 +190,8 @@ type EditorAPI interface {
 	ClosePanel()
 	ShowHover(title string, lines []string)
 	CloseHover()
+	ShowCompletions(items []CompletionItem, startRow, startCol int, onSelect func(CompletionItem))
+	CloseCompletions()
 	ThemeName() string
 	Palette() map[string]string
 }
