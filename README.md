@@ -9,25 +9,9 @@
 
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-a6e3a1?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v1.2.2-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
+[![Version](https://img.shields.io/badge/Version-v1.2.5-c6a0f6?style=flat-square)](https://github.com/marciobbj/larry/releases)
 
 </div>
-
----
-
-```text
- ▾ my-project/              │  main.go ●  │  README.md  │  config.json             1/3
-────────────────────────────│──────────────────────────────────────────────────────────
- ▾ cmd/                   • │    1 package main
- │ ▾ larry/               • │    2
- │ │ ● main.go            M │ ▎  3 import "fmt"
- ▾ internal/                │    4
- │ ▸ ui/                    │ ▎  5 func main() {
-   README.md              M │ ▎  6     fmt.Println("Hello from Larry!")
-   notes.md               ? │ ▁  7 }
-────────────────────────────┴──────────────────────────────────────────────────────────
-  main.go  ●  ⎇ main                              Ctrl+o Hide Tree │ Ctrl+p Finder │ …
-```
 
 ## Why Larry?
 
