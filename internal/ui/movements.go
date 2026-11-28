@@ -1,9 +1,5 @@
 package ui
 
-import (
-	"unicode"
-)
-
 const JumpLineCount = 5
 
 func FindNextWordBoundary(lines []string, row, col int) (int, int) {
@@ -25,24 +21,22 @@ func FindNextWordBoundary(lines []string, row, col int) (int, int) {
 		return row, 0
 	}
 
-	// If at or past the end of line, stay on the last character.
+	if col < 0 {
+		col = 0
+	}
+	// If already at or past end of line, stay on the same line.
 	if col >= lineLen {
-		return row, lineLen - 1
+		return row, lineLen
 	}
 
-	// Skip current word (non-space characters)
-	for col < lineLen && !unicode.IsSpace(lineRunes[col]) {
+	// Skip leading whitespace and punctuation (., (), ;, operators, etc.)
+	for col < lineLen && !isWordRune(lineRunes[col]) {
 		col++
 	}
 
-	// Skip spaces
-	for col < lineLen && unicode.IsSpace(lineRunes[col]) {
+	// Advance to the end of the word (letters, digits, underscores)
+	for col < lineLen && isWordRune(lineRunes[col]) {
 		col++
-	}
-
-	// If we reached end of line, stay on the last character.
-	if col >= lineLen {
-		return row, lineLen - 1
 	}
 
 	return row, col
@@ -71,19 +65,17 @@ func FindPrevWordBoundary(lines []string, row, col int) (int, int) {
 	if col <= 0 {
 		return row, 0
 	}
+	if col > lineLen {
+		col = lineLen
+	}
 
-	// Move back one to start scanning
-	if col > 0 {
+	// Skip whitespace and punctuation backwards
+	for col > 0 && !isWordRune(lineRunes[col-1]) {
 		col--
 	}
 
-	// Skip spaces backwards
-	for col > 0 && unicode.IsSpace(lineRunes[col]) {
-		col--
-	}
-
-	// Skip current word backwards (non-space characters)
-	for col > 0 && !unicode.IsSpace(lineRunes[col-1]) {
+	// Move to the start of the word
+	for col > 0 && isWordRune(lineRunes[col-1]) {
 		col--
 	}
 
