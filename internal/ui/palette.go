@@ -187,8 +187,19 @@ func (p *PickerModal) Render(totalW, totalH int) string {
 	header := titleRendered + bgFill.Render(strings.Repeat(" ", hGap)) + countRendered
 
 	// Input row
-	p.Input.Width = innerW - 4
-	inputRow := p.Input.View()
+	ti := p.Input
+	ti.Width = innerW - 4
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(pal.AccentAlt).Background(bg).Bold(true)
+	ti.TextStyle = lipgloss.NewStyle().Foreground(pal.Foreground).Background(bg)
+	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(pal.MutedFg).Background(bg)
+	ti.Cursor.Style = lipgloss.NewStyle().Foreground(pal.AccentFg).Background(pal.Accent)
+	ti.Cursor.TextStyle = lipgloss.NewStyle().Foreground(pal.Foreground).Background(bg)
+	inputView := ti.View()
+	inPad := innerW - lipgloss.Width(inputView)
+	if inPad < 0 {
+		inPad = 0
+	}
+	inputRow := inputView + bgFill.Render(strings.Repeat(" ", inPad))
 	divider := ruleStyle.Render(strings.Repeat("─", innerW))
 
 	// Adjust scroll window

@@ -1279,7 +1279,7 @@ func (m Model) View() string {
 			if i >= maxH-2 {
 				break
 			}
-			allLines = append(allLines, spacerStyle.Width(w).Render(line))
+			allLines = append(allLines, line)
 		}
 
 		modal := modalStyle.Render(strings.Join(allLines, "\n"))
@@ -1415,6 +1415,7 @@ func (m *Model) renderPromptBar() string {
 	ti.PromptStyle = lipgloss.NewStyle().Foreground(p.Accent).Background(barBg).Bold(true)
 	ti.TextStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(barBg)
 	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(p.MutedFg).Background(barBg)
+	ti.Cursor.Style = lipgloss.NewStyle().Foreground(p.AccentFg).Background(p.Accent)
 	ti.Cursor.TextStyle = lipgloss.NewStyle().Foreground(p.Foreground).Background(barBg)
 
 	var counter, hint string

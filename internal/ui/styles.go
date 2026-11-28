@@ -179,6 +179,7 @@ func initStyles() {
 	modalStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(p.Accent).
+		BorderBackground(p.Background).
 		Padding(1, 2).
 		Background(p.Background)
 	modalTitleStyle = lipgloss.NewStyle().
@@ -190,6 +191,7 @@ func initStyles() {
 	helpStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(p.Accent).
+		BorderBackground(p.Surface).
 		Padding(1, 2).
 		Background(p.Surface).
 		Foreground(p.Foreground)
