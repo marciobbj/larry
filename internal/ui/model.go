@@ -93,6 +93,8 @@ type Model struct {
 	plugins            *plugin.Manager
 	pickerActive       bool
 	picker             PickerModal
+	themePickerActive  bool
+	themePicker        ThemePickerModal
 	pluginHover        HoverState
 	pluginPanel        PanelState
 	bufferChangeSeq    int
@@ -133,6 +135,12 @@ func InitialModel(filename string, lines []string, cfg config.Config) Model {
 	if cfg.Plugins.IsEnabled() {
 		pluginsDir := config.PluginsDir()
 		pluginMgr = plugin.NewManager(cfg, pluginsDir)
+		pluginMgr.RegisterBuiltIn(plugin.PluginInfo{
+			Name:        "colorschemes",
+			Version:     "1.0.0",
+			Description: fmt.Sprintf("Interactive colorscheme switcher (%d curated themes with live preview)", len(BuiltinColorSchemes())),
+			Author:      "Larry",
+		})
 		pluginMgr.LoadAll()
 		startupStatus = pluginMgr.StartupNotice()
 	} else {
@@ -350,6 +358,10 @@ func (m Model) handleFileTreeKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	case key.Matches(msg, m.KeyMap.CommandPalette):
 		m = m.openCommandPalette()
+		return m, nil
+
+	case key.Matches(msg, m.KeyMap.ThemePicker):
+		m = m.openThemePicker()
 		return m, nil
 
 	case key.Matches(msg, m.KeyMap.Open):
@@ -673,6 +685,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, omarchyWatchTickCmd()
 		}
 		return m, nil
+	}
+
+	if m.themePickerActive {
+		if ws, ok := msg.(tea.WindowSizeMsg); ok {
+			m.Width = ws.Width
+			m.Height = ws.Height
+			m.fileTree.Height = m.workspaceHeight()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		var chosen *ColorScheme
+		var closed, hoveredChanged bool
+		m.themePicker, cmd, chosen, closed, hoveredChanged = m.themePicker.Update(msg)
+		if closed {
+			m.themePickerActive = false
+			if chosen != nil {
+				m = m.applyColorScheme(*chosen, true)
+			} else {
+				// Revert live preview back to the original theme.
+				m = m.applyThemeByName(m.themePicker.OriginalTheme, false)
+			}
+			return m, nil
+		}
+		if hoveredChanged {
+			if hovered, ok := m.themePicker.Hovered(); ok {
+				m = m.applyThemeByName(hovered.ID, false)
+			}
+		}
+		return m, cmd
 	}
 
 	if m.pickerActive {
@@ -1135,6 +1176,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			!key.Matches(msg, m.KeyMap.GlobalFinder) &&
 			!key.Matches(msg, m.KeyMap.GlobalReplace) &&
 			!key.Matches(msg, m.KeyMap.CommandPalette) &&
+			!key.Matches(msg, m.KeyMap.ThemePicker) &&
 			!key.Matches(msg, m.KeyMap.Quit) {
 			m.showWelcome = false
 		}
@@ -1247,6 +1289,10 @@ func (m Model) View() string {
 			lipgloss.Center, lipgloss.Center,
 			modal,
 		)
+	}
+
+	if m.themePickerActive {
+		return m.themePicker.Render(m.Width, m.Height)
 	}
 
 	if m.pickerActive {

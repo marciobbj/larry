@@ -28,6 +28,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	switch {
+	case key.Matches(msg, m.KeyMap.ThemePicker):
+		m = m.openThemePicker()
+		return m, nil
+
 	case key.Matches(msg, m.KeyMap.ToggleMarkdownPreview):
 		if isMarkdownFile(m.FileName) {
 			if m.viewMode == ViewModeSplit {

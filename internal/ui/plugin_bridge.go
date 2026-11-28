@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"larry/internal/config"
 	"larry/internal/plugin"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -381,7 +382,12 @@ func (m Model) saveCurrentFile(filename string) (Model, error) {
 // ── Command Palette ──
 
 func (m Model) openCommandPalette() Model {
-	leader := displayLeaderKey(m.Config.LeaderKey)
+	leaderKey := normalizeLeaderKey(m.Config.LeaderKey)
+	leader := displayLeaderKey(leaderKey)
+	secondary := "Alt"
+	if leaderKey == "alt" {
+		secondary = "Ctrl"
+	}
 
 	entries := []PickerEntry{
 		{ID: "builtin.save", Category: "Editor", Label: "Save File", Shortcut: leader + "+s"},
@@ -395,6 +401,18 @@ func (m Model) openCommandPalette() Model {
 		{ID: "builtin.plugins_list", Category: "Plugins", Label: "List Loaded Plugins"},
 		{ID: "builtin.plugins_reload", Category: "Plugins", Label: "Reload All Plugins"},
 		{ID: "builtin.plugins_logs", Category: "Plugins", Label: "Show Plugin Logs"},
+	}
+
+	if !m.Config.Plugins.IsDisabled("colorschemes") {
+		entries = append([]PickerEntry{
+			{
+				ID:       "builtin.colorschemes",
+				Category: "Theme",
+				Label:    "Switch Colorscheme",
+				Detail:   fmt.Sprintf("%d curated themes · live preview", len(BuiltinColorSchemes())),
+				Shortcut: secondary + "+t",
+			},
+		}, entries...)
 	}
 
 	if m.plugins != nil {
@@ -428,6 +446,8 @@ func (m Model) executePaletteEntry(chosen PickerEntry) (Model, tea.Cmd) {
 	}
 
 	switch chosen.ID {
+	case "builtin.colorschemes":
+		m = m.openThemePicker()
 	case "builtin.save":
 		if m.FileName != "" {
 			var err error
@@ -557,8 +577,14 @@ func (m Model) showLoadedPluginsPanel() Model {
 				status = "ERR: " + p.Err
 			}
 			line := fmt.Sprintf("• %s", p.Name)
+			if p.BuiltIn {
+				line += " [built-in]"
+			}
 			if p.Version != "" {
 				line += " (" + p.Version + ")"
+			}
+			if !p.Loaded && p.BuiltIn {
+				status = "DISABLED"
 			}
 			line += " — " + status
 			lines = append(lines, line)
@@ -573,6 +599,56 @@ func (m Model) showLoadedPluginsPanel() Model {
 		Lines:   lines,
 	}
 	m.invalidateVisualCache()
+	return m
+}
+
+// ── Built-in Colorschemes Plugin ──
+
+func (m Model) openThemePicker() Model {
+	if m.Config.Plugins.IsDisabled("colorschemes") {
+		m.statusMsg = "Built-in plugin 'colorschemes' is disabled"
+		return m
+	}
+	m.themePicker = NewThemePickerModal(m.Config.Theme)
+	m.themePickerActive = true
+	if hovered, ok := m.themePicker.Hovered(); ok {
+		m = m.applyThemeByName(hovered.ID, false)
+	}
+	return m
+}
+
+func (m Model) applyThemeByName(themeName string, emitEvent bool) Model {
+	SetTheme(themeName)
+	m.textInput.PromptStyle = textInputStyle
+	m.textInput.TextStyle = textInputStyle
+	m.markdownRenderer = nil
+	m.markdownCacheValid = false
+	m = m.syncMarkdownForLayout()
+	if emitEvent && m.plugins != nil {
+		mode := "dark"
+		if !activePalette.IsDark {
+			mode = "light"
+		}
+		m.plugins.Emit(m.editorAPI(), plugin.EventThemeChange, map[string]any{
+			"theme": themeName,
+			"mode":  mode,
+		})
+	}
+	return m
+}
+
+func (m Model) applyColorScheme(scheme ColorScheme, persist bool) Model {
+	m.Config.Theme = scheme.ID
+	m = m.applyThemeByName(scheme.ID, true)
+	if persist && m.Config.ConfigPath != "" {
+		if err := config.SaveTheme(m.Config.ConfigPath, scheme.ID); err != nil {
+			m.statusMsg = fmt.Sprintf("Theme: %s (save failed: %v)", scheme.Name, err)
+			return m
+		}
+		m.statusMsg = fmt.Sprintf("Theme applied & saved: %s", scheme.Name)
+		return m
+	}
+	m.statusMsg = fmt.Sprintf("Theme applied: %s", scheme.Name)
 	return m
 }
 

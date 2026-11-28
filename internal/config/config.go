@@ -35,6 +35,7 @@ type Config struct {
 	WordWrap    bool          `json:"word_wrap"`
 	LeaderKey   string        `json:"leader_key"`
 	Plugins     PluginsConfig `json:"plugins,omitempty"`
+	ConfigPath  string        `json:"-"`
 }
 
 // PluginsDir returns the fixed, cross-platform directory where Larry discovers Lua plugins:
@@ -97,11 +98,14 @@ func LoadConfig(path string) (Config, error) {
 	}
 
 	if path == "" {
+		cfg.ConfigPath = DefaultConfigPath()
 		if hasOmarchyTheme() {
 			cfg.Theme = "omarchy"
 		}
 		return cfg, nil
 	}
+
+	cfg.ConfigPath = path
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -112,12 +116,57 @@ func LoadConfig(path string) (Config, error) {
 	if err != nil {
 		return DefaultConfig(), err
 	}
+	cfg.ConfigPath = path
 
 	if cfg.Theme == "" && hasOmarchyTheme() {
 		cfg.Theme = "omarchy"
 	}
 
 	return cfg, nil
+}
+
+// DefaultConfigPath returns the preferred path for persisting user configuration.
+func DefaultConfigPath() string {
+	if configDir, err := os.UserConfigDir(); err == nil && configDir != "" {
+		p := filepath.Join(configDir, "larry", "config.json")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		fallback := filepath.Join(homeDir, ".config", "larry", "config.json")
+		if _, err := os.Stat(fallback); err == nil {
+			return fallback
+		}
+		return fallback
+	}
+	if configDir, err := os.UserConfigDir(); err == nil && configDir != "" {
+		return filepath.Join(configDir, "larry", "config.json")
+	}
+	return ""
+}
+
+// SaveTheme persists the selected theme name into configPath while preserving
+// all other existing keys in config.json.
+func SaveTheme(configPath, themeName string) error {
+	if configPath == "" {
+		return nil
+	}
+	raw := make(map[string]any)
+	if data, err := os.ReadFile(configPath); err == nil && len(data) > 0 {
+		_ = json.Unmarshal(data, &raw)
+	}
+	raw["theme"] = themeName
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	out = append(out, '\n')
+	return os.WriteFile(configPath, out, 0o644)
 }
 
 func hasOmarchyTheme() bool {

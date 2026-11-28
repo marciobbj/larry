@@ -257,51 +257,7 @@ func OmarchyThemeSignature(colorsPath string) string {
 
 // BuildOmarchyChromaStyle synthesizes a Chroma syntax highlighting theme from OmarchyColors.
 func BuildOmarchyChromaStyle(c OmarchyColors) (*chroma.Style, error) {
-	entries := chroma.StyleEntries{
-		chroma.Background:          c.Foreground + " bg:" + c.Background,
-		chroma.Text:                c.Foreground,
-		chroma.Error:               c.Red,
-		chroma.Comment:             "italic " + c.DarkForeground,
-		chroma.CommentPreproc:      c.Cyan,
-		chroma.Keyword:             "bold " + c.Magenta,
-		chroma.KeywordConstant:     c.Orange,
-		chroma.KeywordDeclaration:  "bold " + c.Magenta,
-		chroma.KeywordNamespace:    c.Cyan,
-		chroma.KeywordType:         c.Cyan,
-		chroma.Operator:            c.Cyan,
-		chroma.OperatorWord:        "bold " + c.Magenta,
-		chroma.Punctuation:         c.LightForeground,
-		chroma.Name:                c.Foreground,
-		chroma.NameAttribute:       c.Accent,
-		chroma.NameBuiltin:         c.Cyan,
-		chroma.NameBuiltinPseudo:   c.Orange,
-		chroma.NameClass:           "bold " + c.Yellow,
-		chroma.NameConstant:        c.Orange,
-		chroma.NameDecorator:         c.Accent,
-		chroma.NameEntity:            c.Yellow,
-		chroma.NameException:         c.Red,
-		chroma.NameFunction:          c.Blue,
-		chroma.NameFunctionMagic:     c.BrightBlue,
-		chroma.NameNamespace:         c.Cyan,
-		chroma.NameTag:               c.Red,
-		chroma.NameVariable:          c.BrightForeground,
-		chroma.LiteralNumber:         c.Orange,
-		chroma.LiteralString:         c.Green,
-		chroma.LiteralStringBacktick: c.Cyan,
-		chroma.LiteralStringDoc:      "italic " + c.Green,
-		chroma.LiteralStringEscape:   c.Cyan,
-		chroma.LiteralStringInterpol: c.Cyan,
-		chroma.LiteralStringRegex:    c.Yellow,
-		chroma.GenericDeleted:        c.Red,
-		chroma.GenericEmph:           "italic " + c.LightForeground,
-		chroma.GenericError:          c.Red,
-		chroma.GenericHeading:        "bold " + c.Accent,
-		chroma.GenericInserted:       c.Green,
-		chroma.GenericPrompt:         "bold " + c.Accent,
-		chroma.GenericStrong:         "bold " + c.BrightForeground,
-		chroma.GenericSubheading:     "bold " + c.Blue,
-	}
-	return chroma.NewStyle("omarchy", entries)
+	return BuildChromaStyleFromColors("omarchy", c)
 }
 
 func paletteFromOmarchy(c OmarchyColors) UIPalette {
