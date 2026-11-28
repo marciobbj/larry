@@ -565,3 +565,38 @@ func BuildChromaStyleFromColors(name string, c OmarchyColors) (*chroma.Style, er
 	}
 	return chroma.NewStyle(name, entries)
 }
+
+// OmarchyColorScheme returns a live ColorScheme entry representing the active
+// Omarchy desktop theme when an Omarchy colors.toml file is available.
+func OmarchyColorScheme() (ColorScheme, bool) {
+	colors, _, err := LoadCurrentOmarchyColors()
+	if err != nil {
+		return ColorScheme{}, false
+	}
+	mode := colors.Mode
+	if mode != "light" {
+		mode = "dark"
+	}
+	return ColorScheme{
+		ID:          "omarchy",
+		Name:        "Omarchy (Auto)",
+		Family:      "Omarchy",
+		Category:    "Modern",
+		Description: "Follows active Omarchy desktop theme (live reload)",
+		Mode:        mode,
+		Colors:      colors,
+	}, true
+}
+
+// ThemePickerColorSchemes returns all selectable colorschemes for the Theme
+// Picker, placing the live Omarchy (Auto) theme first when Omarchy is present.
+func ThemePickerColorSchemes() []ColorScheme {
+	builtin := BuiltinColorSchemes()
+	if om, ok := OmarchyColorScheme(); ok {
+		out := make([]ColorScheme, 0, len(builtin)+1)
+		out = append(out, om)
+		out = append(out, builtin...)
+		return out
+	}
+	return builtin
+}

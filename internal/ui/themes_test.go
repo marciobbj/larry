@@ -327,3 +327,89 @@ func TestTerminalBackgroundOSC11AndReset(t *testing.T) {
 		t.Fatalf("expected second reset to be a no-op, got %q", got)
 	}
 }
+
+func TestOmarchyThemeInThemePickerAndLiveWatcher(t *testing.T) {
+	isolatePluginsDir(t)
+
+	tmpDir := t.TempDir()
+	colorsPath := filepath.Join(tmpDir, "colors.toml")
+	initialColors := `
+accent = "#7aa2f7"
+background = "#1a1b26"
+foreground = "#c0caf5"
+color1 = "#f7768e"
+color2 = "#9ece6a"
+color3 = "#e0af68"
+color4 = "#7aa2f7"
+color5 = "#bb9af7"
+color6 = "#7dcfff"
+`
+	if err := os.WriteFile(colorsPath, []byte(initialColors), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LARRY_OMARCHY_COLORS", colorsPath)
+
+	cfgPath := filepath.Join(tmpDir, "config.json")
+	cfg := config.DefaultConfig()
+	cfg.Theme = "tokyo-night-day"
+	cfg.ConfigPath = cfgPath
+
+	m := InitialModel("main.go", []string{"package main"}, cfg)
+	defer m.ClosePlugins()
+	m.Width = 110
+	m.Height = 30
+
+	// Open Theme Picker (Alt+T) -> Omarchy (Auto) must appear first in list
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}, Alt: true})
+	m = updated.(Model)
+	if !m.themePickerActive {
+		t.Fatal("expected theme picker to open")
+	}
+	if len(m.themePicker.AllSchemes) == 0 || m.themePicker.AllSchemes[0].ID != "omarchy" {
+		t.Fatalf("expected 'omarchy' as first scheme in picker, got %+v", m.themePicker.AllSchemes[0])
+	}
+
+	// Filter to "omarchy" and press Enter -> applies, persists, and starts live watcher cmd
+	for _, r := range "omarchy" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	var watchCmd tea.Cmd
+	updated, watchCmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.Config.Theme != "omarchy" || !omarchyActive || paintCanvasBg {
+		t.Fatalf("expected omarchy active with transparent canvas, got theme=%q omarchyActive=%v paintCanvasBg=%v",
+			m.Config.Theme, omarchyActive, paintCanvasBg)
+	}
+	if watchCmd == nil {
+		t.Fatal("expected switching to omarchy theme to start live reload watcher tea.Cmd")
+	}
+	if activePalette.Accent != lipgloss.Color("#7aa2f7") {
+		t.Fatalf("expected initial Omarchy accent #7aa2f7, got %q", activePalette.Accent)
+	}
+
+	// Simulate desktop Omarchy theme switch -> colors.toml changes and watcher tick fires
+	updatedColors := `
+accent = "#f38ba8"
+background = "#1e1e2e"
+foreground = "#cdd6f4"
+color1 = "#f38ba8"
+color2 = "#a6e3a1"
+color3 = "#f9e2af"
+color4 = "#89b4fa"
+color5 = "#cba6f7"
+color6 = "#94e2d5"
+`
+	if err := os.WriteFile(colorsPath, []byte(updatedColors), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	updated, nextCmd := m.Update(omarchyThemeTickMsg{gen: m.omarchyWatcherGen})
+	m = updated.(Model)
+	if nextCmd == nil {
+		t.Fatal("expected omarchy watcher to reschedule itself")
+	}
+	if activePalette.Accent != lipgloss.Color("#f38ba8") {
+		t.Fatalf("expected live-reloaded Omarchy accent #f38ba8, got %q", activePalette.Accent)
+	}
+}

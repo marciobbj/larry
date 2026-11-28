@@ -32,11 +32,13 @@ func NewThemePickerModal(currentTheme string) ThemePickerModal {
 	ti.TextStyle = lipgloss.NewStyle().Foreground(activePalette.Foreground)
 
 	activeID := strings.ToLower(strings.TrimSpace(currentTheme))
-	if cs, ok := LookupColorScheme(activeID); ok {
+	if isOmarchyThemeName(activeID) {
+		activeID = "omarchy"
+	} else if cs, ok := LookupColorScheme(activeID); ok {
 		activeID = cs.ID
 	}
 
-	all := BuiltinColorSchemes()
+	all := ThemePickerColorSchemes()
 	tp := ThemePickerModal{
 		Input:         ti,
 		AllSchemes:    all,
@@ -266,7 +268,9 @@ func (tp *ThemePickerModal) Render(totalW, totalH int) string {
 	// ── Header row ──
 	leftHeader := badgeStyle.Render("LARRY") + bgFill.Render(" ") + titleStyle.Render("Colorschemes")
 	activeLabel := tp.ActiveThemeID
-	if cs, ok := LookupColorScheme(tp.ActiveThemeID); ok {
+	if isOmarchyThemeName(tp.ActiveThemeID) {
+		activeLabel = "Omarchy (Auto)"
+	} else if cs, ok := LookupColorScheme(tp.ActiveThemeID); ok {
 		activeLabel = cs.Name
 	}
 	countStr := fmt.Sprintf("%d/%d", len(tp.Filtered), len(tp.AllSchemes))

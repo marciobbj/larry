@@ -101,6 +101,7 @@ type Model struct {
 	bufferChangeSeq    int
 	lastModifiedVer    int
 	lastCursorRow      int
+	omarchyWatcherGen  int
 }
 
 func isMarkdownFile(filename string) bool {
@@ -582,11 +583,13 @@ func (m Model) openGlobalReplace() Model {
 	return m
 }
 
-type omarchyThemeTickMsg struct{}
+type omarchyThemeTickMsg struct {
+	gen int
+}
 
-func omarchyWatchTickCmd() tea.Cmd {
+func omarchyWatchTickCmd(gen int) tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg {
-		return omarchyThemeTickMsg{}
+		return omarchyThemeTickMsg{gen: gen}
 	})
 }
 
@@ -637,7 +640,7 @@ func (m *Model) invalidateGitCache() {
 func (m Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 	if isOmarchyThemeName(m.Config.Theme) {
-		cmds = append(cmds, omarchyWatchTickCmd())
+		cmds = append(cmds, omarchyWatchTickCmd(m.omarchyWatcherGen))
 	}
 	if m.plugins != nil {
 		m.plugins.Emit(m.editorAPI(), plugin.EventInit, nil)
@@ -669,8 +672,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if _, ok := msg.(omarchyThemeTickMsg); ok {
-		if isOmarchyThemeName(m.Config.Theme) {
+	if tickMsg, ok := msg.(omarchyThemeTickMsg); ok {
+		if isOmarchyThemeName(m.Config.Theme) && tickMsg.gen == m.omarchyWatcherGen {
 			path := ResolveOmarchyColorsPath()
 			sig := OmarchyThemeSignature(path)
 			if sig != "" && sig != omarchySignature {
@@ -684,7 +687,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.plugins.Emit(m.editorAPI(), plugin.EventThemeChange, map[string]any{"theme": m.Config.Theme})
 				}
 			}
-			return m, omarchyWatchTickCmd()
+			return m, omarchyWatchTickCmd(m.omarchyWatcherGen)
 		}
 		return m, nil
 	}
@@ -704,6 +707,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.themePickerActive = false
 			if chosen != nil {
 				m = m.applyColorScheme(*chosen, true)
+				if isOmarchyThemeName(m.Config.Theme) {
+					m.omarchyWatcherGen++
+					return m, omarchyWatchTickCmd(m.omarchyWatcherGen)
+				}
 			} else {
 				// Revert live preview back to the original theme.
 				m = m.applyThemeByName(m.themePicker.OriginalTheme, false)
