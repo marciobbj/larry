@@ -294,7 +294,7 @@ func (m Model) viewHelpMenu(base string) string {
 	cardStyle := helpStyle.Copy().Padding(vPad, 2)
 	helpMenu := cardStyle.Render(strings.Join(allRows, "\n"))
 
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, helpMenu)
+	return placeCentered(width, height, helpMenu)
 }
 
 func renderHelpColumn(

@@ -38,16 +38,16 @@ func (m Model) viewWelcome() string {
 	}
 
 	// ── Styles ──
-	logoStyle := lipgloss.NewStyle().
+	logoStyle := withCanvasBg(lipgloss.NewStyle().
 		Foreground(accentColor).
-		Bold(true)
+		Bold(true))
 
-	catStyle := lipgloss.NewStyle().
-		Foreground(catColor)
+	catStyle := withCanvasBg(lipgloss.NewStyle().
+		Foreground(catColor))
 
-	taglineStyle := lipgloss.NewStyle().
+	taglineStyle := withCanvasBg(lipgloss.NewStyle().
 		Foreground(taglineColor).
-		Italic(true)
+		Italic(true))
 
 	versionStyle := lipgloss.NewStyle().
 		Foreground(versionFg).
@@ -55,23 +55,23 @@ func (m Model) viewWelcome() string {
 		Bold(true).
 		Padding(0, 1)
 
-	separatorStyle := lipgloss.NewStyle().
-		Foreground(separatorColor)
+	separatorStyle := withCanvasBg(lipgloss.NewStyle().
+		Foreground(separatorColor))
 
-	sectionTitleStyle := lipgloss.NewStyle().
+	sectionTitleStyle := withCanvasBg(lipgloss.NewStyle().
 		Foreground(subtleColor).
-		Bold(true)
+		Bold(true))
 
-	actionKeyStyle := lipgloss.NewStyle().
+	actionKeyStyle := withCanvasBg(lipgloss.NewStyle().
 		Foreground(keyColor).
-		Bold(true)
+		Bold(true))
 
-	actionDescStyle := lipgloss.NewStyle().
-		Foreground(descFgColor)
+	actionDescStyle := withCanvasBg(lipgloss.NewStyle().
+		Foreground(descFgColor))
 
-	hintStyle := lipgloss.NewStyle().
+	hintStyle := withCanvasBg(lipgloss.NewStyle().
 		Foreground(dimColor).
-		Italic(true)
+		Italic(true))
 
 	// ── Leader key ──
 	leader := displayLeaderKey(m.Config.LeaderKey)
@@ -86,7 +86,7 @@ func (m Model) viewWelcome() string {
 	}
 
 	centerLine := func(s string) string {
-		return lipgloss.NewStyle().Width(blockWidth).Align(lipgloss.Center).Render(s)
+		return withCanvasBg(lipgloss.NewStyle().Width(blockWidth).Align(lipgloss.Center)).Render(s)
 	}
 
 	// ── Symmetrical Cat ASCII Art (exact 7-char lines) ──
@@ -129,11 +129,12 @@ func (m Model) viewWelcome() string {
 	}
 
 	const colGap = "   "
+	gapStyled := canvasBlankStyle.Render(colGap)
 	actionRows := make([]string, 0, len(actions))
 	for _, a := range actions {
 		keyPadded := a.Key + strings.Repeat(" ", maxKeyW-runewidth.StringWidth(a.Key))
 		descPadded := a.Desc + strings.Repeat(" ", maxDescW-runewidth.StringWidth(a.Desc))
-		row := actionKeyStyle.Render(keyPadded) + colGap + actionDescStyle.Render(descPadded)
+		row := actionKeyStyle.Render(keyPadded) + gapStyled + actionDescStyle.Render(descPadded)
 		actionRows = append(actionRows, centerLine(row))
 	}
 
@@ -212,9 +213,5 @@ func (m Model) viewWelcome() string {
 	content := strings.Join(lines, "\n")
 
 	// Center the uniform-width block cleanly in the available pane
-	return lipgloss.Place(
-		width, height,
-		lipgloss.Center, lipgloss.Center,
-		content,
-	)
+	return placeCentered(width, height, content)
 }

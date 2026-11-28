@@ -282,6 +282,7 @@ func paletteFromOmarchy(c OmarchyColors) UIPalette {
 		Accent:      lipgloss.Color(c.Accent),
 		AccentAlt:   lipgloss.Color(c.Magenta),
 		AccentFg:    accentFg,
+		CanvasBg:    lipgloss.Color(c.Background),
 		Background:  lipgloss.Color(modalBg),
 		Surface:     lipgloss.Color(surface),
 		Selection:   lipgloss.Color(c.Selection),

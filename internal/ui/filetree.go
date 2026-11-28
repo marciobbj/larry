@@ -468,8 +468,9 @@ func (ft FileTreeModel) View(width, height int) string {
 
 	if len(ft.Nodes) == 0 {
 		lines = append(lines, treeEmptyStyle.Render(padOrTruncate(" (empty)", width)))
+		blankLine := sidebarBlankStyle.Render(strings.Repeat(" ", width))
 		for len(lines) < height {
-			lines = append(lines, strings.Repeat(" ", width))
+			lines = append(lines, blankLine)
 		}
 		return strings.Join(lines, "\n")
 	}
@@ -484,8 +485,11 @@ func (ft FileTreeModel) View(width, height int) string {
 		lines = append(lines, ft.renderNodeLine(node, i == ft.Cursor, width))
 	}
 
-	for len(lines) < height {
-		lines = append(lines, strings.Repeat(" ", width))
+	if len(lines) < height {
+		blankLine := sidebarBlankStyle.Render(strings.Repeat(" ", width))
+		for len(lines) < height {
+			lines = append(lines, blankLine)
+		}
 	}
 
 	return strings.Join(lines[:height], "\n")
@@ -610,19 +614,22 @@ func (ft FileTreeModel) renderNodeLine(node TreeNode, isSelected bool, width int
 	}
 
 	var b strings.Builder
+	sp := sidebarBlankStyle.Render(" ")
 	if node.Depth > 0 {
-		b.WriteString(" ")
+		b.WriteString(sp)
 		b.WriteString(treeGuideStyle.Render(strings.Repeat("│ ", node.Depth)))
 	} else {
-		b.WriteString(" ")
+		b.WriteString(sp)
 	}
 	b.WriteString(iconStyle.Render(icon))
 	b.WriteString(nameStyle.Render(truncatedName))
-	b.WriteString(trailingPad)
+	if trailingPad != "" {
+		b.WriteString(sidebarBlankStyle.Render(trailingPad))
+	}
 	if badgeReserved > 0 {
-		b.WriteString(" ")
-		b.WriteString(badgeStyle.Render(badge))
-		b.WriteString(" ")
+		b.WriteString(sp)
+		b.WriteString(withSidebarBg(badgeStyle).Render(badge))
+		b.WriteString(sp)
 	}
 	return b.String()
 }

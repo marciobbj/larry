@@ -33,11 +33,28 @@ func normalizeAbsPath(path string) string {
 	if path == "" {
 		return ""
 	}
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return filepath.Clean(path)
 	}
 	return filepath.Clean(abs)
+}
+
+// activeAbsPath returns the cached absolute path for the active buffer without
+// hitting os.Getwd() on every render frame.
+func (m Model) activeAbsPath() string {
+	if m.FileName == "" {
+		return ""
+	}
+	if m.activeTab >= 0 && m.activeTab < len(m.tabs) &&
+		m.tabs[m.activeTab].FileName == m.FileName &&
+		m.tabs[m.activeTab].AbsPath != "" {
+		return m.tabs[m.activeTab].AbsPath
+	}
+	return normalizeAbsPath(m.FileName)
 }
 
 func (m *Model) ensureTabsInitialized() {
